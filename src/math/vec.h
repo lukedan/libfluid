@@ -16,8 +16,9 @@ namespace fluid {
 		template <typename Vec> [[nodiscard]] inline typename Vec::value_type dot(
 			const Vec &lhs, const Vec &rhs
 		) {
+			assert(lhs.size() == rhs.size());
 			typename Vec::value_type result{};
-			for (std::size_t i = 0; i < Vec::dimensionality; ++i) {
+			for (std::size_t i = 0; i < lhs.size(); ++i) {
 				result += lhs[i] * rhs[i];
 			}
 			return result;
@@ -64,6 +65,14 @@ namespace fluid {
 				}
 			}
 
+			/// Returns the unit vector that corresponds to the \p I-th axis.
+			template <std::size_t I> inline constexpr static Derived axis() {
+				static_assert(I < N, "invalid axis");
+				Derived result;
+				result[I] = static_cast<T>(1);
+				return result;
+			}
+
 		private:
 			/// Casts this class to \p Derived.
 			[[nodiscard]] Derived *_derived() {
@@ -94,6 +103,13 @@ namespace fluid {
 			[[nodiscard]] T operator[](std::size_t i) const {
 				return at(i);
 			}
+
+
+			// pretend that this is a std::vector
+			constexpr inline static std::size_t size() {
+				return dimensionality;
+			}
+			// TODO begin(), end(), etc. if necessary
 
 
 		private:
@@ -209,6 +225,7 @@ namespace fluid {
 		};
 	}
 
+
 	/// General vectors (5D or above).
 	///
 	/// \tparam N The dimensionality of this vector type.
@@ -218,6 +235,7 @@ namespace fluid {
 
 		T coord[N]{}; ///< All coordinates, zero-initialized.
 	};
+
 
 	/// 2D vectors.
 	template <typename T> struct vec<2, T> : public _details::vec_base<2, T, vec<2, T>> {
@@ -242,6 +260,7 @@ namespace fluid {
 	using vec2d = vec2<double>; ///< Shorthand for \p vec2<double>.
 	using vec2i = vec2<int>; ///< Shorthand for \p vec2<int>.
 
+
 	/// 3D vectors.
 	template <typename T> struct vec<3, T> : public _details::vec_base<3, T, vec<3, T>> {
 		/// Initializes this vector to zero.
@@ -265,6 +284,33 @@ namespace fluid {
 	using vec3f = vec3<float>; ///< Shorthand for \p vec3<float>.
 	using vec3d = vec3<double>; ///< Shorthand for \p vec3<double>.
 	using vec3i = vec3<int>; ///< Shorthand for \p vec3<int>.
+	using vec3s = vec3<std::size_t>; ///< Shorthand for \p vec3<std::size_t>.
+
+
+	/// 4D vectors.
+	template <typename T> struct vec<4, T> : public _details::vec_base<4, T, vec<4, T>> {
+		/// Initializes this vector to zero.
+		vec() : x(), y(), z(), w() {
+		}
+		/// Initializes all coordinates.
+		template <typename ...Args> vec(Args &&...args) : vec_base(std::forward<Args>(args)...) {
+		}
+
+		union {
+			struct {
+				T
+					x, ///< The X component.
+					y, ///< The Y component.
+					z, ///< The Z component.
+					w; ///< The W component.
+			};
+			T coord[4]; ///< The coordinates.
+		};
+	};
+	template <typename T> using vec4 = vec<4, T>; ///< Shorthand for 4D vectors.
+	using vec4f = vec4<float>; ///< Shorthand for \p vec4<float>.
+	using vec4d = vec4<double>; ///< Shorthand for \p vec4<double>.
+	using vec4i = vec4<int>; ///< Shorthand for \p vec4<int>.
 
 
 	namespace vec_ops {
