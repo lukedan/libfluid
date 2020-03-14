@@ -1,4 +1,7 @@
 #include <iostream>
+#include <atomic>
+#include <thread>
+#include <mutex>
 
 #ifdef _WIN32
 #	define NOMINMAX
@@ -10,17 +13,18 @@
 
 #include "simulation.h"
 
-fluid::simulation sim;
+using fluid::vec2d;
+using fluid::vec3d;
+using fluid::vec3s;
 
-bool paused = true;
+std::atomic_bool paused = true;
 
 bool rotating = false;
-fluid::vec2d mouse, rotation;
+vec2d mouse, rotation;
 
+
+// callbacks
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-	if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
-		sim.update(1.0 / 30.0);
-	}
 	if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
 		paused = !paused;
 	}
@@ -33,12 +37,56 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 }
 
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
-	fluid::vec2d new_mouse(xpos, ypos);
+	vec2d new_mouse(xpos, ypos);
 	if (rotating) {
 		rotation += new_mouse - mouse;
 	}
 	mouse = new_mouse;
 }
+
+void resize_callback(GLFWwindow *window, int width, int height) {
+	glViewport(0, 0, width, height);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(60.0, width / static_cast<double>(height), 0.1, 1000.0);
+}
+
+
+vec3d sim_grid_offset;
+vec3s sim_grid_size(50, 50, 50);
+double sim_cell_size = 1.0;
+std::mutex sim_particles_lock;
+std::vector<vec3d> sim_particles;
+
+void update_particles(const std::vector<fluid::particle> &particles) {
+	std::lock_guard<std::mutex> guard(sim_particles_lock);
+	sim_particles.clear();
+	for (const auto &particle : particles) {
+		sim_particles.emplace_back(particle.position);
+	}
+}
+
+void worker_thread() {
+	fluid::simulation sim;
+
+	sim.resize(sim_grid_size);
+	sim.grid_offset = sim_grid_offset;
+	sim.cell_size = sim_cell_size;
+
+	/*sim.seed_box(fluid::vec3s(20, 20, 20), fluid::vec3s(10, 10, 10));*/
+	sim.seed_box(fluid::vec3s(15, 15, 15), fluid::vec3s(20, 20, 20));
+	/*sim.seed_box(fluid::vec3s(10, 10, 10), fluid::vec3s(30, 30, 30));*/
+	/*sim.seed_box(vec3s(0, 0, 0), vec3s(10, 50, 50));*/
+	update_particles(sim.get_particles());
+
+	while (true) {
+		if (!paused) {
+			sim.update(1.0 / 30.0);
+			update_particles(sim.get_particles());
+		}
+	}
+}
+
 
 int main() {
 	if (!glfwInit()) {
@@ -53,31 +101,22 @@ int main() {
 	glfwSetKeyCallback(window, key_callback);
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, cursor_position_callback);
-
-	sim.resize(fluid::vec3s(50, 50, 50));
-	sim.cell_size = 1.0;
-
-	sim.seed_box(fluid::vec3s(15, 15, 15), fluid::vec3s(20, 20, 20));
-	/*sim.seed_box(fluid::vec3s(0, 0, 0), fluid::vec3s(10, 50, 50));*/
+	glfwSetWindowSizeCallback(window, resize_callback);
 
 	glfwMakeContextCurrent(window);
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+	int width, height;
+	glfwGetWindowSize(window, &width, &height);
+	resize_callback(window, width, height);
+
+	std::thread t(worker_thread);
+	t.detach();
+
 	while (!glfwWindowShouldClose(window)) {
-		if (!paused) {
-			sim.update(1.0 / 30.0);
-		}
-
 		glClear(GL_COLOR_BUFFER_BIT);
-
-		int width, height;
-		glfwGetWindowSize(window, &width, &height);
-
-		glMatrixMode(GL_PROJECTION);
-		glLoadIdentity();
-		gluPerspective(60.0, width / static_cast<double>(height), 0.1, 1000.0);
 
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
@@ -87,9 +126,9 @@ int main() {
 		glTranslatef(-25, -25, -25);
 
 		glBegin(GL_LINES);
-		fluid::vec3d
-			min_corner = sim.grid_offset,
-			max_corner = sim.grid_offset + fluid::vec3d(sim.grid().grid().get_size()) * sim.cell_size;
+		vec3d
+			min_corner = sim_grid_offset,
+			max_corner = sim_grid_offset + vec3d(sim_grid_size) * sim_cell_size;
 		glColor3d(0.3, 0.3, 0.3);
 
 		glVertex3d(min_corner.x, min_corner.y, min_corner.z);
@@ -157,9 +196,11 @@ int main() {
 
 		glBegin(GL_POINTS);
 		glColor4d(1.0, 1.0, 1.0, 0.2);
-		for (const fluid::particle &p : sim.get_particles()) {
-			fluid::vec3d pos = p.position + sim.grid_offset;
-			glVertex3d(pos.x, pos.y, pos.z);
+		{
+			std::lock_guard<std::mutex> guard(sim_particles_lock);
+			for (vec3d pos : sim_particles) {
+				glVertex3d(pos.x, pos.y, pos.z);
+			}
 		}
 		glEnd();
 

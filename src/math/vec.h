@@ -8,12 +8,15 @@
 #include <cassert>
 #include <utility>
 #include <optional>
+#include <functional>
 #include <initializer_list>
+
+#include "../misc.h"
 
 namespace fluid {
 	namespace vec_ops {
 		/// Dot product.
-		template <typename Vec> [[nodiscard]] inline typename Vec::value_type dot(
+		template <typename Vec> FLUID_FORCEINLINE [[nodiscard]] inline typename Vec::value_type dot(
 			const Vec &lhs, const Vec &rhs
 		) {
 			assert(lhs.size() == rhs.size());
@@ -25,7 +28,7 @@ namespace fluid {
 		}
 
 		/// Applies the given function to all elements of the input vectors.
-		template <typename Res, typename Func, typename ...Vecs> inline void apply_to(
+		template <typename Res, typename Func, typename ...Vecs> inline void apply_to_dynamic(
 			Res &out, const Func &func, const Vecs &...vecs
 		) {
 			assert(((vecs.size() == out.size()) && ...));
@@ -34,8 +37,48 @@ namespace fluid {
 			}
 		}
 
+		namespace _details {
+			/// Wrapper around \ref apply_to_impl().
+			template <std::size_t ...Is, typename Res, typename Func, typename ...Vecs> inline void apply_to(
+				std::index_sequence<Is...>, Res &out, const Func &func, const Vecs &...vecs
+			) {
+				apply_to_impl<Is...>(out, func, vecs...);
+			}
+			/// Implementation of \ref apply_to().
+			template <
+				std::size_t I, std::size_t ...Is, typename Res, typename Func, typename ...Vecs
+			> inline void apply_to_impl(Res &out, const Func &func, const Vecs &...vecs) {
+				out[I] = func(vecs[I]...);
+				apply_to_impl<Is...>(out, func, vecs...);
+			}
+			/// End of recursion.
+			template <
+				typename Res, typename Func, typename ...Vecs
+			> inline void apply_to_impl(Res&, const Func&, const Vecs&...) {
+			}
+		}
+		/// Static version of \ref apply_to_dynamic() with manual loop unrolling. This function requires that the \p Res type
+		/// has a static constexpr \p size() member. Use whenever possible.
+		template <typename Res, typename Func, typename ...Vecs> inline void apply_to(
+			Res &out, const Func &func, const Vecs &...vecs
+		) {
+			assert(((vecs.size() == Res::size()) && ...));
+			_details::apply_to(std::make_index_sequence<Res::size()>(), out, func, vecs...);
+		}
+
 		/// Applies the given function to all elements of the input vectors. This version requires that the type has
 		/// a static \p size() function.
+		template <typename Res, typename Func, typename ...Vecs> [[nodiscard]] inline Res apply_dynamic(
+			const Func &func, const Vecs &...vecs
+		) {
+			assert(((vecs.size() == Res::size()) && ...));
+			Res result;
+			apply_to_dynamic(result, func, vecs...);
+			return result;
+		}
+
+		/// Wrapper around \ref apply_to(). This version requires that the type has a static constexpr
+		/// \p size() function.
 		template <typename Res, typename Func, typename ...Vecs> [[nodiscard]] inline Res apply(
 			const Func &func, const Vecs &...vecs
 		) {
@@ -48,22 +91,12 @@ namespace fluid {
 		namespace memberwise {
 			/// Memberwise multiplication.
 			template <typename Vec> [[nodiscard]] inline Vec mul(const Vec &lhs, const Vec &rhs) {
-				return apply<Vec>(
-					[](typename Vec::value_type a, typename Vec::value_type b) {
-						return a * b;
-					},
-					lhs, rhs
-						);
+				return apply<Vec>(std::multiplies(), lhs, rhs);
 			}
 
 			/// Memberwise division.
 			template <typename Vec> [[nodiscard]] inline Vec div(const Vec &lhs, const Vec &rhs) {
-				return apply<Vec>(
-					[](typename Vec::value_type a, typename Vec::value_type b) {
-						return a / b;
-					},
-					lhs, rhs
-						);
+				return apply<Vec>(std::divides(), lhs, rhs);
 			}
 		}
 	}
@@ -153,58 +186,62 @@ namespace fluid {
 		public:
 			// arithmetic
 			/// In-place addition.
-			Derived &operator+=(const Derived &rhs) {
-				for (std::size_t i = 0; i < N; ++i) {
-					(*this)[i] += rhs[i];
-				}
+			FLUID_FORCEINLINE Derived &operator+=(const Derived &rhs) {
+				vec_ops::apply_to(*this, std::plus(), *this, rhs);
 				return *_derived();
 			}
 			/// Addition.
-			[[nodiscard]] friend Derived operator+(const Derived &lhs, const Derived &rhs) {
+			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator+(const Derived &lhs, const Derived &rhs) {
 				return Derived(lhs) += rhs;
 			}
 
 			/// In-place subtraction.
-			Derived &operator-=(const Derived &rhs) {
-				for (std::size_t i = 0; i < N; ++i) {
-					(*this)[i] -= rhs[i];
-				}
+			FLUID_FORCEINLINE Derived &operator-=(const Derived &rhs) {
+				vec_ops::apply_to(*this, std::minus(), *this, rhs);
 				return *_derived();
 			}
 			/// Subtraction.
-			[[nodiscard]] friend Derived operator-(const Derived &lhs, const Derived &rhs) {
+			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator-(const Derived &lhs, const Derived &rhs) {
 				return Derived(lhs) -= rhs;
+			}
+			/// Negation.
+			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator-(const Derived &lhs) {
+				return vec_ops::apply<Derived>(std::negate(), lhs);
 			}
 
 			/// In-place division.
-			template <typename Dummy = void> _valid_for_floating_point_t<Derived&, Dummy> operator/=(T rhs) {
-				for (std::size_t i = 0; i < N; ++i) {
-					(*this)[i] /= rhs;
-				}
+			template <typename Dummy = void> FLUID_FORCEINLINE _valid_for_floating_point_t<
+				Derived&, Dummy
+			> operator/=(const T &rhs) {
+				vec_ops::apply_to(
+					*this, [&](const T &lhs) {
+						return lhs / rhs;
+					}, *this
+				);
 				return *_derived();
 			}
 			/// Division.
-			template <typename Dummy = void> [[nodiscard]] friend _valid_for_floating_point_t<
+			template <typename Dummy = void> FLUID_FORCEINLINE [[nodiscard]] friend _valid_for_floating_point_t<
 				Derived, Dummy
-			> operator/(
-				Derived lhs, T rhs
-				) {
+			> operator/(Derived lhs, const T &rhs) {
 				return lhs /= rhs;
 			}
 
 			/// In-place multiplication.
-			Derived &operator*=(T rhs) {
-				for (std::size_t i = 0; i < N; ++i) {
-					(*this)[i] *= rhs;
-				}
+			FLUID_FORCEINLINE Derived &operator*=(const T &rhs) {
+				vec_ops::apply_to(
+					*this, [&](const T &lhs) {
+						return lhs * rhs;
+					}, *this
+				);
 				return *_derived();
 			}
 			/// Multiplication.
-			[[nodiscard]] friend Derived operator*(Derived lhs, T rhs) {
+			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(Derived lhs, const T &rhs) {
 				return lhs *= rhs;
 			}
 			/// Multiplication.
-			[[nodiscard]] friend Derived operator*(T lhs, Derived rhs) {
+			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(const T &lhs, Derived rhs) {
 				return rhs *= lhs;
 			}
 
@@ -276,12 +313,12 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		[[nodiscard]] T &at(std::size_t i) {
+		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < N);
 			return v[i];
 		}
 		/// Indexing.
-		[[nodiscard]] T at(std::size_t i) const {
+		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < N);
 			return v[i];
 		}
@@ -304,7 +341,7 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		[[nodiscard]] T &at(std::size_t i) {
+		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < 2);
 			switch (i) {
 			case 0:
@@ -315,7 +352,7 @@ namespace fluid {
 			std::abort();
 		}
 		/// Indexing.
-		[[nodiscard]] T at(std::size_t i) const {
+		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < 2);
 			switch (i) {
 			case 0:
@@ -350,7 +387,7 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		[[nodiscard]] T &at(std::size_t i) {
+		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < 3);
 			switch (i) {
 			case 0:
@@ -363,7 +400,7 @@ namespace fluid {
 			std::abort();
 		}
 		/// Indexing.
-		[[nodiscard]] T at(std::size_t i) const {
+		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < 3);
 			switch (i) {
 			case 0:
@@ -402,7 +439,7 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		[[nodiscard]] T &at(std::size_t i) {
+		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < 4);
 			switch (i) {
 			case 0:
@@ -417,7 +454,7 @@ namespace fluid {
 			std::abort();
 		}
 		/// Indexing.
-		[[nodiscard]] T at(std::size_t i) const {
+		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < 4);
 			switch (i) {
 			case 0:

@@ -48,7 +48,7 @@ namespace fluid {
 		space_hashing<particle> _space_hash; ///< Space hashing.
 
 		/// The kernel function used when transfering velocities to and from the grid.
-		[[nodiscard]] double _kernel(vec3d) const;
+		[[nodiscard]] FLUID_FORCEINLINE double _kernel(vec3d) const;
 
 		/// Advects particles.
 		void _advect_particles(double);

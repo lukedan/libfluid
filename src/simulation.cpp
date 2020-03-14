@@ -91,9 +91,6 @@ namespace fluid {
 		for (const particle &p : get_particles()) {
 			maxlen = std::max(maxlen, p.velocity.squared_length());
 		}
-		if (maxlen < 1e-6) { // TODO magic number
-			return std::numeric_limits<double>::max();
-		}
 		return cell_size / std::sqrt(maxlen);
 	}
 
@@ -188,7 +185,7 @@ namespace fluid {
 			vec_ops::apply_to(
 				p.velocity,
 				[](double a, double b, double t) {
-					return a * (1 - t) + b * t;
+					return a * (1.0 - t) + b * t;
 				},
 				neg_vel, cell.velocities_posface, t
 					);
