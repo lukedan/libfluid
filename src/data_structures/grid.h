@@ -10,13 +10,15 @@
 namespace fluid {
 	/// A 3D grid. The cells are stored in X-Y-Z order, i.e., cells with consecutive X coordinates are stored
 	/// consecutively in memory.
-	template <typename Cell> class grid {
+	template <typename Cell> class grid3 {
 	public:
+		/// Default constructor.
+		grid3() = default;
 		/// Initializes the cell storage.
-		explicit grid(vec3s size) : grid(size, Cell{}) {
+		explicit grid3(vec3s size) : grid3(size, Cell{}) {
 		}
 		/// Initializes the cell storage, seting all cells to the given value.
-		grid(vec3s size, const Cell &c) : _cells(size.x * size.y * size.z), _size(size) {
+		grid3(vec3s size, const Cell &c) : _cells(size.x * size.y * size.z), _size(size) {
 		}
 
 		/// Indexing.
@@ -66,6 +68,13 @@ namespace fluid {
 			return _size;
 		}
 
+		/// Fills the entire grid using the given value.
+		void fill(const Cell &value) {
+			for (Cell &c : _cells) {
+				c = value;
+			}
+		}
+
 		/// Returns whether the cell at the given index is at the border of this grid.
 		bool is_border_cell(vec3s i) const {
 			return
@@ -80,7 +89,7 @@ namespace fluid {
 			return i.x + _size.x * (i.y + _size.y * i.z);
 		}
 		/// Converts a raw index for \ref _cells to a (x, y, z) position.
-		vec3s index_from_raw(vec3s i) const {
+		vec3s index_from_raw(std::size_t i) const {
 			assert(i < _cells.size());
 			std::size_t yz = i / _size.x;
 			return vec3s(i % _size.x, yz % _size.y, yz / _size.y);

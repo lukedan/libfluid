@@ -23,6 +23,49 @@ namespace fluid {
 			}
 			return result;
 		}
+
+		/// Applies the given function to all elements of the input vectors.
+		template <typename Res, typename Func, typename ...Vecs> inline void apply_to(
+			Res &out, const Func &func, const Vecs &...vecs
+		) {
+			assert(((vecs.size() == out.size()) && ...));
+			for (std::size_t i = 0; i < out.size(); ++i) {
+				out[i] = func(vecs[i]...);
+			}
+		}
+
+		/// Applies the given function to all elements of the input vectors. This version requires that the type has
+		/// a static \p size() function.
+		template <typename Res, typename Func, typename ...Vecs> [[nodiscard]] inline Res apply(
+			const Func &func, const Vecs &...vecs
+		) {
+			assert(((vecs.size() == Res::size()) && ...));
+			Res result;
+			apply_to(result, func, vecs...);
+			return result;
+		}
+
+		namespace memberwise {
+			/// Memberwise multiplication.
+			template <typename Vec> [[nodiscard]] inline Vec mul(const Vec &lhs, const Vec &rhs) {
+				return apply<Vec>(
+					[](typename Vec::value_type a, typename Vec::value_type b) {
+						return a * b;
+					},
+					lhs, rhs
+						);
+			}
+
+			/// Memberwise division.
+			template <typename Vec> [[nodiscard]] inline Vec div(const Vec &lhs, const Vec &rhs) {
+				return apply<Vec>(
+					[](typename Vec::value_type a, typename Vec::value_type b) {
+						return a / b;
+					},
+					lhs, rhs
+						);
+			}
+		}
 	}
 
 	namespace _details {
@@ -37,15 +80,13 @@ namespace fluid {
 
 			/// Initializes this vector to zero.
 			vec_base() = default;
-			/// Initializes all components of this vector.
-			template <typename ...Args, typename = std::enable_if_t<sizeof...(Args) == N>> vec_base(Args &&...args) {
-				_init(std::make_index_sequence<sizeof...(Args)>(), std::forward<Args>(args)...);
-			}
-		private:
-			/// Initializes all coordinates using the given arguments.
+		protected:
+			/// Initializes all coordinates using the given arguments. Concrete \p vec structs should use this to
+			/// implement direct initialization.
 			template <std::size_t ...Is, typename ...Args> void _init(std::index_sequence<Is...>, Args &&...args) {
 				_init_impl<Is...>(std::forward<Args>(args)...);
 			}
+		private:
 			/// Implementation of \ref _init().
 			template <std::size_t I, std::size_t ...OtherIs, typename Arg, typename ...OtherArgs> void _init_impl(
 				Arg &&arg, OtherArgs &&...others
@@ -55,16 +96,18 @@ namespace fluid {
 			}
 			/// Initializes a single element. Also serves as the end of recursion.
 			template <std::size_t I, typename Arg> void _init_impl(Arg &&arg) {
-				at(I) = std::forward<Arg>(arg);
+				(*this)[I] = std::forward<Arg>(arg);
 			}
-		public:
-			/// Conversion from a vector of another type.
-			template <typename U, typename D> explicit vec_base(const vec_base<N, U, D> &other) {
+		protected:
+			/// Conversion from a vector of another type. Concrete \p vec structs should use this to implement
+			/// conversion.
+			template <typename Other> void _convert(const Other &other) {
 				for (std::size_t i = 0; i < N; ++i) {
-					at(i) = static_cast<T>(other[i]);
+					(*this)[i] = static_cast<T>(other[i]);
 				}
 			}
 
+		public:
 			/// Returns the unit vector that corresponds to the \p I-th axis.
 			template <std::size_t I> inline constexpr static Derived axis() {
 				static_assert(I < N, "invalid axis");
@@ -86,22 +129,12 @@ namespace fluid {
 		public:
 			// indexing
 			/// Indexing.
-			[[nodiscard]] T &at(std::size_t i) {
-				assert(i < N);
-				return _derived()->coord[i];
-			}
-			/// Indexing.
-			[[nodiscard]] T at(std::size_t i) const {
-				assert(i < N);
-				return _derived()->coord[i];
-			}
-			/// Indexing.
 			[[nodiscard]] T &operator[](std::size_t i) {
-				return at(i);
+				return _derived()->at(i);
 			}
 			/// Indexing.
 			[[nodiscard]] T operator[](std::size_t i) const {
-				return at(i);
+				return _derived()->at(i);
 			}
 
 
@@ -122,37 +155,37 @@ namespace fluid {
 			/// In-place addition.
 			Derived &operator+=(const Derived &rhs) {
 				for (std::size_t i = 0; i < N; ++i) {
-					at(i) += rhs[i];
+					(*this)[i] += rhs[i];
 				}
 				return *_derived();
 			}
 			/// Addition.
-			[[nodiscard]] friend Derived &operator+(const Derived &lhs, const Derived &rhs) {
+			[[nodiscard]] friend Derived operator+(const Derived &lhs, const Derived &rhs) {
 				return Derived(lhs) += rhs;
 			}
 
 			/// In-place subtraction.
 			Derived &operator-=(const Derived &rhs) {
 				for (std::size_t i = 0; i < N; ++i) {
-					at(i) -= rhs[i];
+					(*this)[i] -= rhs[i];
 				}
 				return *_derived();
 			}
 			/// Subtraction.
-			[[nodiscard]] friend Derived &operator-(const Derived &lhs, const Derived &rhs) {
+			[[nodiscard]] friend Derived operator-(const Derived &lhs, const Derived &rhs) {
 				return Derived(lhs) -= rhs;
 			}
 
 			/// In-place division.
 			template <typename Dummy = void> _valid_for_floating_point_t<Derived&, Dummy> operator/=(T rhs) {
 				for (std::size_t i = 0; i < N; ++i) {
-					at(i) /= rhs;
+					(*this)[i] /= rhs;
 				}
 				return *_derived();
 			}
 			/// Division.
 			template <typename Dummy = void> [[nodiscard]] friend _valid_for_floating_point_t<
-				Derived&, Dummy
+				Derived, Dummy
 			> operator/(
 				Derived lhs, T rhs
 				) {
@@ -162,16 +195,16 @@ namespace fluid {
 			/// In-place multiplication.
 			Derived &operator*=(T rhs) {
 				for (std::size_t i = 0; i < N; ++i) {
-					at(i) *= rhs;
+					(*this)[i] *= rhs;
 				}
 				return *_derived();
 			}
 			/// Multiplication.
-			[[nodiscard]] friend Derived &operator*(Derived lhs, T rhs) {
+			[[nodiscard]] friend Derived operator*(Derived lhs, T rhs) {
 				return lhs *= rhs;
 			}
 			/// Multiplication.
-			[[nodiscard]] friend Derived &operator*(T lhs, Derived rhs) {
+			[[nodiscard]] friend Derived operator*(T lhs, Derived rhs) {
 				return rhs *= lhs;
 			}
 
@@ -231,29 +264,71 @@ namespace fluid {
 	/// \tparam N The dimensionality of this vector type.
 	/// \tparam T The type of each coordinate.
 	template <std::size_t N, typename T> struct vec : public _details::vec_base<N, T, vec<N, T>> {
-		using vec_base::vec_base;
+		/// Default constructor.
+		vec() = default;
+		/// Direct initialization.
+		template <typename ...Args, typename = std::enable_if_t<sizeof...(Args) == N>> vec(Args &&...args) {
+			this->_init(std::make_index_sequence<N>(), std::forward<Args>(args)...);
+		}
+		/// Conversion.
+		template <typename Other> explicit vec(const vec<N, Other> &src) {
+			this->_convert(src);
+		}
 
-		T coord[N]{}; ///< All coordinates, zero-initialized.
+		/// Indexing.
+		[[nodiscard]] T &at(std::size_t i) {
+			assert(i < N);
+			return v[i];
+		}
+		/// Indexing.
+		[[nodiscard]] T at(std::size_t i) const {
+			assert(i < N);
+			return v[i];
+		}
+
+		T v[N]{}; ///< All coordinates, zero-initialized.
 	};
 
 
 	/// 2D vectors.
 	template <typename T> struct vec<2, T> : public _details::vec_base<2, T, vec<2, T>> {
 		/// Initializes this vector to zero.
-		vec() : x(), y() {
+		vec() = default;
+		/// Direct initialization.
+		template <typename ...Args, typename = std::enable_if_t<sizeof...(Args) == 2>> vec(Args &&...args) {
+			this->_init(std::make_index_sequence<2>(), std::forward<Args>(args)...);
 		}
-		/// Initializes all coordinates.
-		template <typename ...Args> vec(Args &&...args) : vec_base(std::forward<Args>(args)...) {
+		/// Conversion.
+		template <typename Other> explicit vec(const vec<2, Other> &src) {
+			this->_convert(src);
 		}
 
-		union {
-			struct {
-				T
-					x, ///< The X component.
-					y; ///< The Y component.
-			};
-			T coord[2]; ///< The coordinates.
-		};
+		/// Indexing.
+		[[nodiscard]] T &at(std::size_t i) {
+			assert(i < 2);
+			switch (i) {
+			case 0:
+				return x;
+			case 1:
+				return y;
+			}
+			std::abort();
+		}
+		/// Indexing.
+		[[nodiscard]] T at(std::size_t i) const {
+			assert(i < 2);
+			switch (i) {
+			case 0:
+				return x;
+			case 1:
+				return y;
+			}
+			std::abort();
+		}
+
+		T
+			x{}, ///< The X component.
+			y{}; ///< The Y component.
 	};
 	template <typename T> using vec2 = vec<2, T>; ///< Shorthand for 2D vectors.
 	using vec2f = vec2<float>; ///< Shorthand for \p vec2<float>.
@@ -264,21 +339,47 @@ namespace fluid {
 	/// 3D vectors.
 	template <typename T> struct vec<3, T> : public _details::vec_base<3, T, vec<3, T>> {
 		/// Initializes this vector to zero.
-		vec() : x(), y(), z() {
+		vec() = default;
+		/// Direct initialization.
+		template <typename ...Args, typename = std::enable_if_t<sizeof...(Args) == 3>> vec(Args &&...args) {
+			this->_init(std::make_index_sequence<3>(), std::forward<Args>(args)...);
 		}
-		/// Initializes all coordinates.
-		template <typename ...Args> vec(Args &&...args) : vec_base(std::forward<Args>(args)...) {
+		/// Conversion.
+		template <typename Other> explicit vec(const vec<3, Other> &src) {
+			this->_convert(src);
 		}
 
-		union {
-			struct {
-				T
-					x, ///< The X component.
-					y, ///< The Y component.
-					z; ///< The Z component.
-			};
-			T coord[3]; ///< The coordinates.
-		};
+		/// Indexing.
+		[[nodiscard]] T &at(std::size_t i) {
+			assert(i < 3);
+			switch (i) {
+			case 0:
+				return x;
+			case 1:
+				return y;
+			case 2:
+				return z;
+			}
+			std::abort();
+		}
+		/// Indexing.
+		[[nodiscard]] T at(std::size_t i) const {
+			assert(i < 3);
+			switch (i) {
+			case 0:
+				return x;
+			case 1:
+				return y;
+			case 2:
+				return z;
+			}
+			std::abort();
+		}
+
+		T
+			x{}, ///< The X component.
+			y{}, ///< The Y component.
+			z{}; ///< The Z component.
 	};
 	template <typename T> using vec3 = vec<3, T>; ///< Shorthand for 3D vectors.
 	using vec3f = vec3<float>; ///< Shorthand for \p vec3<float>.
@@ -290,22 +391,52 @@ namespace fluid {
 	/// 4D vectors.
 	template <typename T> struct vec<4, T> : public _details::vec_base<4, T, vec<4, T>> {
 		/// Initializes this vector to zero.
-		vec() : x(), y(), z(), w() {
+		vec() = default;
+		/// Direct initialization.
+		template <typename ...Args, typename = std::enable_if_t<sizeof...(Args) == 4>> vec(Args &&...args) {
+			this->_init(std::make_index_sequence<4>(), std::forward<Args>(args)...);
 		}
-		/// Initializes all coordinates.
-		template <typename ...Args> vec(Args &&...args) : vec_base(std::forward<Args>(args)...) {
+		/// Conversion.
+		template <typename Other> explicit vec(const vec<4, Other> &src) {
+			this->_convert(src);
 		}
 
-		union {
-			struct {
-				T
-					x, ///< The X component.
-					y, ///< The Y component.
-					z, ///< The Z component.
-					w; ///< The W component.
-			};
-			T coord[4]; ///< The coordinates.
-		};
+		/// Indexing.
+		[[nodiscard]] T &at(std::size_t i) {
+			assert(i < 4);
+			switch (i) {
+			case 0:
+				return x;
+			case 1:
+				return y;
+			case 2:
+				return z;
+			case 3:
+				return w;
+			}
+			std::abort();
+		}
+		/// Indexing.
+		[[nodiscard]] T at(std::size_t i) const {
+			assert(i < 4);
+			switch (i) {
+			case 0:
+				return x;
+			case 1:
+				return y;
+			case 2:
+				return z;
+			case 3:
+				return w;
+			}
+			std::abort();
+		}
+
+		T
+			x{}, ///< The X component.
+			y{}, ///< The Y component.
+			z{}, ///< The Z component.
+			w{}; ///< The W component.
 	};
 	template <typename T> using vec4 = vec<4, T>; ///< Shorthand for 4D vectors.
 	using vec4f = vec4<float>; ///< Shorthand for \p vec4<float>.
