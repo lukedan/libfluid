@@ -73,8 +73,6 @@ namespace fluid {
 	void pressure_solver::apply_pressure(double dt, const std::vector<double> &p) const {
 		double _coeff = dt / (_sim.density * _sim.cell_size);
 
-		std::vector<vec3s> air_cells; // air cells that need to be updated.
-
 		for (std::size_t i = 0; i < _fluid_cells.size(); ++i) {
 			vec3s pos = _fluid_cells[i];
 			double cur_pressure = p[i];

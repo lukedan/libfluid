@@ -3,6 +3,7 @@
 /// \file
 /// Complete fluid simulation.
 
+#include "misc.h"
 #include "data_structures/fluid_grid.h"
 #include "data_structures/particle.h"
 #include "data_structures/space_hashing.h"
@@ -34,7 +35,11 @@ namespace fluid {
 			return _grid;
 		}
 		/// Returns the list of particles.
-		[[nodiscard]] const std::vector<particle> &get_particles() const {
+		[[nodiscard]] std::vector<particle> &particles() {
+			return _particles;
+		}
+		/// \overload
+		[[nodiscard]] const std::vector<particle> &particles() const {
 			return _particles;
 		}
 
@@ -43,9 +48,16 @@ namespace fluid {
 		double density = 1.0; ///< The density of the fluid.
 	private:
 		std::vector<particle> _particles; ///< All particles.
-		fluid_grid _grid; ///< The grid.
+		fluid_grid
+			_grid, ///< The grid.
+			_old_grid; ///< Grid that stores old velocities used for FLIP.
 
 		space_hashing<particle> _space_hash; ///< Space hashing.
+
+		/// Returns the velocities of the negative direction faces of the given cell.
+		[[nodiscard]] static vec3d _get_negative_face_velocities(const fluid_grid&, vec3s);
+		/// Zeros the velocities at the boundaries of the grid.
+		static void _remove_boundary_velocities(fluid_grid&);
 
 		/// The kernel function used when transfering velocities to and from the grid.
 		[[nodiscard]] FLUID_FORCEINLINE double _kernel(vec3d) const;
@@ -55,8 +67,12 @@ namespace fluid {
 		/// Updates \ref _space_hash.
 		void _hash_particles();
 		/// Transfers velocities from particles to the grid.
-		void _transfer_to_grid();
-		/// Transfers velocities from the grid back to particles.
-		void _transfer_from_grid();
+		void _transfer_to_grid_pic_flip();
+		/// Transfers velocities from the grid back to particles using PIC.
+		void _transfer_from_grid_pic();
+		/// Transfers velocities from the grid back to particles using a blend between PIC and FLIP.
+		///
+		/// \param blend The blend factor. 1.0 means fully FLIP.
+		void _transfer_from_grid_flip(double blend);
 	};
 }

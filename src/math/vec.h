@@ -16,7 +16,7 @@
 namespace fluid {
 	namespace vec_ops {
 		/// Dot product.
-		template <typename Vec> FLUID_FORCEINLINE [[nodiscard]] inline typename Vec::value_type dot(
+		template <typename Vec> FLUID_FORCEINLINE [[nodiscard]] typename Vec::value_type dot(
 			const Vec &lhs, const Vec &rhs
 		) {
 			assert(lhs.size() == rhs.size());

@@ -33,7 +33,11 @@ namespace fluid {
 		std::cout << "timestep " << dt << "\n";
 		_advect_particles(dt);
 		_hash_particles();
-		_transfer_to_grid();
+		_transfer_to_grid_pic_flip();
+		/*
+		_old_grid = _grid;
+		_remove_boundary_velocities(_old_grid);
+		*/
 		// add external forces
 		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z) {
 			for (std::size_t y = 0; y < grid().grid().get_size().y; ++y) {
@@ -47,18 +51,20 @@ namespace fluid {
 			std::vector<vec3s> fluid_cells = _space_hash.get_sorted_occupied_cells();
 			pressure_solver solver(*this, fluid_cells);
 			auto [pressure, residual, iters] = solver.solve(dt);
+			assert(iters < solver.max_iterations);
+			solver.apply_pressure(dt, pressure);
+
 			std::cerr << "  iterations = " << iters << "\n";
 			std::cerr << "  residual = " << residual << "\n";
 			std::cerr << "  max pressure = " << *std::max_element(pressure.begin(), pressure.end()) << "\n";
-			assert(iters < solver.max_iterations);
-			solver.apply_pressure(dt, pressure);
 			double maxv = 0.0;
 			for (const particle &p : _particles) {
 				maxv = std::max(maxv, p.velocity.squared_length());
 			}
 			std::cerr << "  max velocity = " << std::sqrt(maxv) << "\n";
 		}
-		_transfer_from_grid();
+		_transfer_from_grid_pic();
+		/*_transfer_from_grid_flip(1.0);*/
 	}
 
 	void simulation::seed_box(vec3s start, vec3s size, std::size_t density) {
@@ -69,14 +75,14 @@ namespace fluid {
 		for (std::size_t z = 0; z < size.z; ++z) {
 			for (std::size_t y = 0; y < size.y; ++y) {
 				for (std::size_t x = 0; x < size.x; ++x) {
-					vec3d cell_offset = vec3d(x, y, z) * cell_size;
+					vec3d cell_offset = vec3d(vec3s(x, y, z)) * cell_size;
 					for (std::size_t sx = 0; sx < density; ++sx) {
 						for (std::size_t sy = 0; sy < density; ++sy) {
 							for (std::size_t sz = 0; sz < density; ++sz) {
 								vec3d offset(dist(rand), dist(rand), dist(rand));
 								particle p;
 								p.position =
-									offset + vec3d(sx, sy, sz) * small_cell_size + cell_offset + base;
+									offset + vec3d(vec3s(sx, sy, sz)) * small_cell_size + cell_offset + base;
 								_particles.emplace_back(p);
 							}
 						}
@@ -88,7 +94,7 @@ namespace fluid {
 
 	double simulation::cfl() const {
 		double maxlen = 0.0f;
-		for (const particle &p : get_particles()) {
+		for (const particle &p : particles()) {
 			maxlen = std::max(maxlen, p.velocity.squared_length());
 		}
 		return cell_size / std::sqrt(maxlen);
@@ -124,7 +130,7 @@ namespace fluid {
 		}
 	}
 
-	void simulation::_transfer_to_grid() {
+	void simulation::_transfer_to_grid_pic_flip() {
 		double half_cell = 0.5 * cell_size;
 		double zpos = grid_offset.z + half_cell;
 		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z, zpos += cell_size) {
@@ -168,27 +174,68 @@ namespace fluid {
 		}
 	}
 
-	void simulation::_transfer_from_grid() {
+	vec3d simulation::_get_negative_face_velocities(const fluid_grid &grid, vec3s id) {
+		vec3d neg_vel;
+		if (id.x > 0) {
+			neg_vel.x = grid.grid()(id - vec3s::axis<0>()).velocities_posface.x;
+		}
+		if (id.y > 0) {
+			neg_vel.y = grid.grid()(id - vec3s::axis<1>()).velocities_posface.y;
+		}
+		if (id.z > 0) {
+			neg_vel.z = grid.grid()(id - vec3s::axis<2>()).velocities_posface.z;
+		}
+		return neg_vel;
+	}
+
+	void simulation::_remove_boundary_velocities(fluid_grid &g) {
+		vec3s max_pos = g.grid().get_size() - vec3s(1, 1, 1);
+		for (std::size_t z = 0; z < g.grid().get_size().z; ++z) {
+			for (std::size_t y = 0; y < g.grid().get_size().y; ++y) {
+				g.grid()(max_pos.x, y, z).velocities_posface.x = 0.0;
+			}
+			for (std::size_t x = 0; x < g.grid().get_size().x; ++x) {
+				g.grid()(x, max_pos.y, z).velocities_posface.y = 0.0;
+			}
+		}
+		for (std::size_t y = 0; y < g.grid().get_size().y; ++y) {
+			for (std::size_t x = 0; x < g.grid().get_size().x; ++x) {
+				g.grid()(x, y, max_pos.z).velocities_posface.z = 0.0;
+			}
+		}
+	}
+
+	void simulation::_transfer_from_grid_pic() {
 		for (particle &p : _particles) {
 			const fluid_grid::cell &cell = grid().grid()(p.grid_index);
-			vec3d neg_vel;
-			if (p.grid_index.x > 0) {
-				neg_vel.x = grid().grid()(p.grid_index - vec3s::axis<0>()).velocities_posface.x;
-			}
-			if (p.grid_index.y > 0) {
-				neg_vel.y = grid().grid()(p.grid_index - vec3s::axis<1>()).velocities_posface.y;
-			}
-			if (p.grid_index.z > 0) {
-				neg_vel.z = grid().grid()(p.grid_index - vec3s::axis<2>()).velocities_posface.z;
-			}
 			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
 			vec_ops::apply_to(
 				p.velocity,
 				[](double a, double b, double t) {
 					return a * (1.0 - t) + b * t;
 				},
-				neg_vel, cell.velocities_posface, t
+				_get_negative_face_velocities(_grid, p.grid_index), cell.velocities_posface, t
 					);
+		}
+	}
+
+	void simulation::_transfer_from_grid_flip(double blend) {
+		for (particle &p : _particles) {
+			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
+			vec3d
+				old_velocity = vec_ops::apply<vec3d>(
+					lerp<double>,
+					_get_negative_face_velocities(_old_grid, p.grid_index),
+					_old_grid.grid()(p.grid_index).velocities_posface,
+					t
+					),
+				new_velocity = vec_ops::apply<vec3d>(
+					lerp<double>,
+					_get_negative_face_velocities(_grid, p.grid_index),
+					_grid.grid()(p.grid_index).velocities_posface,
+					t
+					);
+			p.velocity = new_velocity + (p.velocity - old_velocity) * blend;
 		}
 	}
 }
