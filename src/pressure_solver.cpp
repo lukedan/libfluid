@@ -39,14 +39,14 @@ namespace fluid {
 		_apply_preconditioner(z, q_scratch, precon, r);
 		std::vector<double> s = z;
 
-		double sigma = vec_ops::dot(z, r);
+		double sigma = vec_ops::dynamic::dot(z, r);
 
 		std::size_t i = 0;
 		for (; i < max_iterations; ++i) {
 
 			_apply_a(z, s);
 
-			double alpha = sigma / vec_ops::dot(z, s);
+			double alpha = sigma / vec_ops::dynamic::dot(z, s);
 
 			_muladd(p, p, s, alpha);
 			_muladd(r, r, z, -alpha);
@@ -59,7 +59,7 @@ namespace fluid {
 
 			_apply_preconditioner(z, q_scratch, precon, r);
 
-			double sigma_new = vec_ops::dot(z, r);
+			double sigma_new = vec_ops::dynamic::dot(z, r);
 
 			double beta = sigma_new / sigma;
 

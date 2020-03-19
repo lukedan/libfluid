@@ -86,12 +86,12 @@ void simulation_thread() {
 			sim.particles().clear();
 
 			/*sim.seed_box(vec3s(20, 20, 20), vec3s(10, 10, 10));*/
-			/*sim.seed_box(vec3s(15, 15, 15), vec3s(20, 20, 20));*/
+			sim.seed_box(vec3s(15, 15, 15), vec3s(20, 20, 20));
 			/*sim.seed_box(vec3s(10, 10, 10), vec3s(30, 30, 30));*/
 			/*sim.seed_box(vec3s(0, 0, 0), vec3s(10, 50, 50));*/
 
-			sim.seed_box(vec3s(20, 35, 20), vec3s(10, 10, 10));
-			sim.seed_box(vec3s(0, 0, 0), vec3s(50, 15, 50));
+			/*sim.seed_box(vec3s(20, 35, 20), vec3s(10, 10, 10));
+			sim.seed_box(vec3s(0, 0, 0), vec3s(50, 15, 50));*/
 
 			update_simulation(sim);
 			sim_reset = false;
@@ -192,7 +192,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 		case GLFW_KEY_S:
 			{
-				std::lock_guard<std::mutex> guard(sim_particles_lock);
+				std::lock_guard<std::mutex> guard(sim_mesh_lock);
 				std::ofstream fout("mesh.obj");
 				sim_mesh.save_obj(fout);
 			}
@@ -360,9 +360,9 @@ int main() {
 				for (std::size_t z = 0; z < sim_grid_velocities.get_size().z; ++z) {
 					for (std::size_t y = 0; y < sim_grid_velocities.get_size().y; ++y) {
 						for (std::size_t x = 0; x < sim_grid_velocities.get_size().x; ++x) {
-							fluid::vec3d
-								face_outer = sim_grid_offset + fluid::vec3d(x + 1, y + 1, z + 1) * sim_cell_size,
-								face_half = face_outer - fluid::vec3d(half_cell, half_cell, half_cell),
+							vec3d
+								face_outer = sim_grid_offset + vec3d(vec3s(x + 1, y + 1, z + 1)) * sim_cell_size,
+								face_half = face_outer - vec3d(half_cell, half_cell, half_cell),
 								vel = sim_grid_velocities(x, y, z) * 0.001;
 
 							glColor3d(1.0, 0.0, 0.0);

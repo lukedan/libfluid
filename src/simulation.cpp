@@ -249,8 +249,9 @@ namespace fluid {
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);
 		double min_dist = 0.1 * re;
 		std::vector<vec3d> new_positions(_particles.size());
+#pragma omp parallel
 		for (std::size_t i = substep; i < _particles.size(); i += step) {
-			particle &p = _particles[i];
+			const particle &p = _particles[i];
 			vec3d spring;
 			_space_hash.for_all_nearby_objects(
 				p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
@@ -264,9 +265,11 @@ namespace fluid {
 							// apic2d multiplies this value by 0.01 * dt here
 							spring += re * vec3d(dist(random), dist(random), dist(random));
 						} else {
-							double kernel = std::max(
-								std::pow(1.0 - sqr_dist / (cell_size * cell_size), 3.0), 0.0
-							);
+							double kernel_lower = 1.0 - sqr_dist / (cell_size * cell_size);
+							double kernel = 0.0;
+							if (kernel_lower > 0.0) {
+								kernel = kernel_lower * kernel_lower * kernel_lower;
+							}
 							spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
 						}
 					}

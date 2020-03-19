@@ -15,7 +15,11 @@ namespace fluid {
 	}
 
 	double mesher::_kernel(double sqr_dist) const {
-		return std::max(std::pow(1.0 - sqr_dist, 3.0), 0.0);
+		sqr_dist = 1.0 - sqr_dist;
+		if (sqr_dist > 0.0) {
+			return sqr_dist * sqr_dist * sqr_dist;
+		}
+		return 0.0;
 	}
 
 	void mesher::_sample_surface_function(const std::vector<vec3d> &particles, double r) {

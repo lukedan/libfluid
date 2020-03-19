@@ -15,26 +15,32 @@
 
 namespace fluid {
 	namespace vec_ops {
-		/// Dot product.
-		template <typename Vec> FLUID_FORCEINLINE [[nodiscard]] typename Vec::value_type dot(
-			const Vec &lhs, const Vec &rhs
-		) {
-			assert(lhs.size() == rhs.size());
-			typename Vec::value_type result{};
-			for (std::size_t i = 0; i < lhs.size(); ++i) {
-				result += lhs[i] * rhs[i];
+		namespace _details {
+			/// Wrapper around \ref for_each_impl().
+			template <std::size_t ...Is, typename Func, typename ...Vecs> inline void for_each(
+				std::index_sequence<Is...>, const Func &func, Vecs &...vecs
+			) {
+				for_each_impl<Is...>(func, vecs...);
 			}
-			return result;
+			/// Implementation of \ref for_each().
+			template <std::size_t I, std::size_t ...Is, typename Func, typename ...Vecs> inline void for_each_impl(
+				const Func &func, Vecs &...vecs
+			) {
+				func(vecs[I]...);
+				for_each_impl<Is...>(func, vecs...);
+			}
+			/// End of recursion.
+			template <typename Func, typename ...Vecs> inline void for_each_impl(const Func&, Vecs&...) {
+			}
 		}
-
-		/// Applies the given function to all elements of the input vectors.
-		template <typename Res, typename Func, typename ...Vecs> inline void apply_to_dynamic(
-			Res &out, const Func &func, const Vecs &...vecs
+		/// Calls the given function on each member of each input vector in a Python <tt>zip</tt>-like fashion, with
+		/// manual loop unrolling. This function requires that the \p FirstVec type has a static constexpr \p size()
+		/// member. Use whenever possible.
+		template <typename Func, typename FirstVec, typename ...OtherVecs> inline void for_each(
+			const Func &func, FirstVec &first, OtherVecs &...others
 		) {
-			assert(((vecs.size() == out.size()) && ...));
-			for (std::size_t i = 0; i < out.size(); ++i) {
-				out[i] = func(vecs[i]...);
-			}
+			assert(((others.size() == FirstVec::size()) && ...));
+			_details::for_each(std::make_index_sequence<FirstVec::size()>(), func, first, others...);
 		}
 
 		namespace _details {
@@ -57,24 +63,13 @@ namespace fluid {
 			> inline void apply_to_impl(Res&, const Func&, const Vecs&...) {
 			}
 		}
-		/// Static version of \ref apply_to_dynamic() with manual loop unrolling. This function requires that the \p Res type
-		/// has a static constexpr \p size() member. Use whenever possible.
+		/// Applies the given function to all elements of the input vectors, with manual loop unrolling. This
+		/// function requires that the \p Res type has a static constexpr \p size() member. Use whenever possible.
 		template <typename Res, typename Func, typename ...Vecs> inline void apply_to(
 			Res &out, const Func &func, const Vecs &...vecs
 		) {
 			assert(((vecs.size() == Res::size()) && ...));
 			_details::apply_to(std::make_index_sequence<Res::size()>(), out, func, vecs...);
-		}
-
-		/// Applies the given function to all elements of the input vectors. This version requires that the type has
-		/// a static \p size() function.
-		template <typename Res, typename Func, typename ...Vecs> [[nodiscard]] inline Res apply_dynamic(
-			const Func &func, const Vecs &...vecs
-		) {
-			assert(((vecs.size() == Res::size()) && ...));
-			Res result;
-			apply_to_dynamic(result, func, vecs...);
-			return result;
 		}
 
 		/// Wrapper around \ref apply_to(). This version requires that the type has a static constexpr
@@ -88,15 +83,69 @@ namespace fluid {
 			return result;
 		}
 
+
+		/// Dot product.
+		template <typename Vec> FLUID_FORCEINLINE [[nodiscard]] typename Vec::value_type dot(
+			const Vec &lhs, const Vec &rhs
+		) {
+			typename Vec::value_type result{};
+			for_each(
+				[&result](const typename Vec::value_type &a, const typename Vec::value_type &b) {
+					result += a * b;
+				},
+				lhs, rhs
+					);
+			return result;
+		}
+
+
+		/// Memberwise vector operations.
 		namespace memberwise {
 			/// Memberwise multiplication.
-			template <typename Vec> [[nodiscard]] inline Vec mul(const Vec &lhs, const Vec &rhs) {
+			template <typename Vec> [[nodiscard]] FLUID_FORCEINLINE Vec mul(const Vec &lhs, const Vec &rhs) {
 				return apply<Vec>(std::multiplies(), lhs, rhs);
 			}
 
 			/// Memberwise division.
-			template <typename Vec> [[nodiscard]] inline Vec div(const Vec &lhs, const Vec &rhs) {
+			template <typename Vec> [[nodiscard]] FLUID_FORCEINLINE Vec div(const Vec &lhs, const Vec &rhs) {
 				return apply<Vec>(std::divides(), lhs, rhs);
+			}
+		}
+
+
+		/// Dynamic versions of vector operations.
+		namespace dynamic {
+			/// Calls the given function on each member of each input vector in a Python <tt>zip</tt>-like fashion.
+			template <typename Func, typename FirstVec, typename ...OtherVecs> inline void for_each(
+				const Func &func, FirstVec &first, OtherVecs &...others
+			) {
+				assert(((others.size() == first.size()) && ...));
+				for (std::size_t i = 0; i < first.size(); ++i) {
+					func(first[i], others[i]...);
+				}
+			}
+
+			/// Applies the given function to all elements of the input vectors.
+			template <typename Res, typename Func, typename ...Vecs> inline void apply_to(
+				Res &out, const Func &func, const Vecs &...vecs
+			) {
+				assert(((vecs.size() == out.size()) && ...));
+				for (std::size_t i = 0; i < out.size(); ++i) {
+					out[i] = func(vecs[i]...);
+				}
+			}
+
+
+			/// Dot product.
+			template <typename Vec> [[nodiscard]] typename Vec::value_type dot(
+				const Vec &lhs, const Vec &rhs
+			) {
+				assert(lhs.size() == rhs.size());
+				typename Vec::value_type result{};
+				for (std::size_t i = 0; i < lhs.size(); ++i) {
+					result += lhs[i] * rhs[i];
+				}
+				return result;
 			}
 		}
 	}
@@ -135,9 +184,13 @@ namespace fluid {
 			/// Conversion from a vector of another type. Concrete \p vec structs should use this to implement
 			/// conversion.
 			template <typename Other> void _convert(const Other &other) {
-				for (std::size_t i = 0; i < N; ++i) {
-					(*_derived())[i] = static_cast<T>(other[i]);
-				}
+				vec_ops::apply_to(
+					*_derived(),
+					[](const typename Other::value_type &v) {
+						return static_cast<T>(v);
+					},
+					other
+						);
 			}
 
 		public:
@@ -217,7 +270,7 @@ namespace fluid {
 					*_derived(), [&](const T &lhs) {
 						return lhs / rhs;
 					}, *_derived()
-				);
+						);
 				return *_derived();
 			}
 			/// Division.
@@ -233,7 +286,7 @@ namespace fluid {
 					*_derived(), [&](const T &lhs) {
 						return lhs * rhs;
 					}, *_derived()
-				);
+						);
 				return *_derived();
 			}
 			/// Multiplication.
