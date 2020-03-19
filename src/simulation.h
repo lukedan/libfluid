@@ -81,6 +81,6 @@ namespace fluid {
 
 		/// Adds spring forces between particles to reduce clumping. \ref _space_hash must have been filled before
 		/// this is called. This is taken from https://github.com/nepluno/apic2d.
-		void _add_spring_forces(double, std::size_t step, std::size_t substep);
+		void _add_spring_forces(double dt, std::size_t step, std::size_t substep);
 	};
 }

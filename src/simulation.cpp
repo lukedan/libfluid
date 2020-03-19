@@ -30,7 +30,7 @@ namespace fluid {
 	}
 
 	void simulation::time_step(double dt) {
-		std::cout << "timestep " << dt << "\n";
+		std::cout << "  timestep " << dt << "\n";
 		_advect_particles(dt);
 		_hash_particles();
 		_transfer_to_grid_pic_flip();
@@ -49,17 +49,19 @@ namespace fluid {
 			std::vector<vec3s> fluid_cells = _space_hash.get_sorted_occupied_cells();
 			pressure_solver solver(*this, fluid_cells);
 			auto [pressure, residual, iters] = solver.solve(dt);
-			assert(iters < solver.max_iterations);
+			if (iters >= solver.max_iterations) {
+				std::cerr << "    WARNING: maximum iterations exceeded\n";
+			}
 			solver.apply_pressure(dt, pressure);
 
-			std::cerr << "  iterations = " << iters << "\n";
-			std::cerr << "  residual = " << residual << "\n";
-			std::cerr << "  max pressure = " << *std::max_element(pressure.begin(), pressure.end()) << "\n";
+			std::cerr << "    iterations = " << iters << "\n";
+			std::cerr << "    residual = " << residual << "\n";
+			std::cerr << "    max pressure = " << *std::max_element(pressure.begin(), pressure.end()) << "\n";
 			double maxv = 0.0;
 			for (const particle &p : _particles) {
 				maxv = std::max(maxv, p.velocity.squared_length());
 			}
-			std::cerr << "  max velocity = " << std::sqrt(maxv) << "\n";
+			std::cerr << "    max velocity = " << std::sqrt(maxv) << "\n";
 		}
 		_add_spring_forces(dt, 1, 0);
 		/*_transfer_from_grid_pic();*/
@@ -246,32 +248,34 @@ namespace fluid {
 		// in apic2d, this distribution is actually (0, 1), not sure why
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);
 		double min_dist = 0.1 * re;
-		for (std::size_t i = 0; i < _particles.size(); ++i) {
-			if (i % step == substep) {
-				particle &p = _particles[i];
-				vec3d spring;
-				_space_hash.for_all_nearby_objects(
-					p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
-					[&](const particle &other) {
-						if (&other != &p) {
-							vec3d offset = p.position - other.position;
-							double sqr_dist = offset.squared_length();
-							if (sqr_dist < min_dist * min_dist) {
-								// the two particles are not too far away, so just add a random force to avoid
-								// floating point errors
-								// apic2d multiplies this value by 0.01 * dt here
-								spring += re * vec3d(dist(random), dist(random), dist(random));
-							} else {
-								double kernel = std::max(
-									std::pow(1.0 - sqr_dist / (cell_size * cell_size), 3.0), 0.0
-								);
-								spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
-							}
+		std::vector<vec3d> new_positions(_particles.size());
+		for (std::size_t i = substep; i < _particles.size(); i += step) {
+			particle &p = _particles[i];
+			vec3d spring;
+			_space_hash.for_all_nearby_objects(
+				p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
+				[&](const particle &other) {
+					if (&other != &p) {
+						vec3d offset = p.position - other.position;
+						double sqr_dist = offset.squared_length();
+						if (sqr_dist < min_dist * min_dist) {
+							// the two particles are not too far away, so just add a random force to avoid
+							// floating point errors
+							// apic2d multiplies this value by 0.01 * dt here
+							spring += re * vec3d(dist(random), dist(random), dist(random));
+						} else {
+							double kernel = std::max(
+								std::pow(1.0 - sqr_dist / (cell_size * cell_size), 3.0), 0.0
+							);
+							spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
 						}
 					}
-				);
-				p.position += spring * dt;
-			}
+				}
+			);
+			new_positions[i] = p.position + spring * dt;
+		}
+		for (std::size_t i = substep; i < _particles.size(); i += step) {
+			_particles[i].position = new_positions[i];
 		}
 	}
 }

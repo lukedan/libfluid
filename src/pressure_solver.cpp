@@ -297,7 +297,7 @@ namespace fluid {
 			if (std::size_t zneg_index = _get_neg_neighbor_index<2>(pos); zneg_index != _not_a_fluid_cell) {
 				neg_t += _a[zneg_index].fluid_zpos * precon[zneg_index] * q_scratch[zneg_index];
 			}
-			q_scratch[i] = (r[i] - _a_scale * neg_t) * precon[i];
+			q_scratch[i] = (r[i] + _a_scale * neg_t) * precon[i];
 		}
 		// next solve L^T z = q
 		for (std::size_t i = _fluid_cells.size(); i > 0; ) {
@@ -314,7 +314,7 @@ namespace fluid {
 			if (std::size_t zpos_index = _get_pos_neighbor_index<2>(pos); zpos_index != _not_a_fluid_cell) {
 				neg_t += cell.fluid_zpos * z[zpos_index];
 			}
-			z[i] = (q_scratch[i] - _a_scale * precon[i] * neg_t) * precon[i];
+			z[i] = (q_scratch[i] + _a_scale * precon[i] * neg_t) * precon[i];
 		}
 	}
 
