@@ -129,14 +129,14 @@ namespace fluid {
 			}
 			/// Initializes a single element. Also serves as the end of recursion.
 			template <std::size_t I, typename Arg> void _init_impl(Arg &&arg) {
-				(*this)[I] = std::forward<Arg>(arg);
+				(*_derived())[I] = std::forward<Arg>(arg);
 			}
 		protected:
 			/// Conversion from a vector of another type. Concrete \p vec structs should use this to implement
 			/// conversion.
 			template <typename Other> void _convert(const Other &other) {
 				for (std::size_t i = 0; i < N; ++i) {
-					(*this)[i] = static_cast<T>(other[i]);
+					(*_derived())[i] = static_cast<T>(other[i]);
 				}
 			}
 
@@ -187,7 +187,7 @@ namespace fluid {
 			// arithmetic
 			/// In-place addition.
 			FLUID_FORCEINLINE Derived &operator+=(const Derived &rhs) {
-				vec_ops::apply_to(*this, std::plus(), *this, rhs);
+				vec_ops::apply_to(*_derived(), std::plus(), *_derived(), rhs);
 				return *_derived();
 			}
 			/// Addition.
@@ -197,7 +197,7 @@ namespace fluid {
 
 			/// In-place subtraction.
 			FLUID_FORCEINLINE Derived &operator-=(const Derived &rhs) {
-				vec_ops::apply_to(*this, std::minus(), *this, rhs);
+				vec_ops::apply_to(*_derived(), std::minus(), *_derived(), rhs);
 				return *_derived();
 			}
 			/// Subtraction.
@@ -214,9 +214,9 @@ namespace fluid {
 				Derived&, Dummy
 			> operator/=(const T &rhs) {
 				vec_ops::apply_to(
-					*this, [&](const T &lhs) {
+					*_derived(), [&](const T &lhs) {
 						return lhs / rhs;
-					}, *this
+					}, *_derived()
 				);
 				return *_derived();
 			}
@@ -230,9 +230,9 @@ namespace fluid {
 			/// In-place multiplication.
 			FLUID_FORCEINLINE Derived &operator*=(const T &rhs) {
 				vec_ops::apply_to(
-					*this, [&](const T &lhs) {
+					*_derived(), [&](const T &lhs) {
 						return lhs * rhs;
-					}, *this
+					}, *_derived()
 				);
 				return *_derived();
 			}
@@ -249,7 +249,7 @@ namespace fluid {
 			// length and normalization
 			/// Returns the squared length of this vector.
 			[[nodiscard]] T squared_length() const {
-				return vec_ops::dot(*this, *this);
+				return vec_ops::dot(*_derived(), *_derived());
 			}
 			/// Returns the length of this vector.
 			template <typename Dummy = void> [[nodiscard]] _valid_for_floating_point_t<T, Dummy> length() const {
@@ -261,7 +261,7 @@ namespace fluid {
 				std::pair<Derived, T>, Dummy
 			> normalized_length_unchecked() const {
 				T len = length();
-				return { *this / len, len };
+				return { *_derived() / len, len };
 			}
 			/// Returns the normalized vector.
 			template <typename Dummy = void> [[nodiscard]] _valid_for_floating_point_t<
@@ -280,7 +280,7 @@ namespace fluid {
 					return std::nullopt;
 				}
 				sqlen = std::sqrt(sqlen);
-				return std::pair<Derived, T>(*this / sqlen, sqlen);
+				return std::pair<Derived, T>(*_derived() / sqlen, sqlen);
 			}
 			/// Returns the normalized vector. If the length is lower than the given threshold, this function returns
 			/// nothing.

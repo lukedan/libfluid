@@ -3,6 +3,8 @@
 /// \file
 /// Complete fluid simulation.
 
+#include <pcg_random.hpp>
+
 #include "misc.h"
 #include "data_structures/fluid_grid.h"
 #include "data_structures/particle.h"
@@ -46,6 +48,8 @@ namespace fluid {
 		vec3d grid_offset; ///< The offset of the grid's origin.
 		double cell_size = std::numeric_limits<double>::quiet_NaN(); ///< The size of each grid cell.
 		double density = 1.0; ///< The density of the fluid.
+		double boundary_skin_width = 0.1; ///< The "skin width" at boundaries to prevent particles from "sticking".
+		pcg32 random; ///< The random engine for the simulation.
 	private:
 		std::vector<particle> _particles; ///< All particles.
 		fluid_grid
@@ -74,5 +78,9 @@ namespace fluid {
 		///
 		/// \param blend The blend factor. 1.0 means fully FLIP.
 		void _transfer_from_grid_flip(double blend);
+
+		/// Adds spring forces between particles to reduce clumping. \ref _space_hash must have been filled before
+		/// this is called. This is taken from https://github.com/nepluno/apic2d.
+		void _add_spring_forces(double, std::size_t step, std::size_t substep);
 	};
 }

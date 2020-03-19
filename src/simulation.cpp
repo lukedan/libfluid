@@ -34,10 +34,8 @@ namespace fluid {
 		_advect_particles(dt);
 		_hash_particles();
 		_transfer_to_grid_pic_flip();
-		/*
 		_old_grid = _grid;
 		_remove_boundary_velocities(_old_grid);
-		*/
 		// add external forces
 		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z) {
 			for (std::size_t y = 0; y < grid().grid().get_size().y; ++y) {
@@ -63,12 +61,13 @@ namespace fluid {
 			}
 			std::cerr << "  max velocity = " << std::sqrt(maxv) << "\n";
 		}
-		_transfer_from_grid_pic();
-		/*_transfer_from_grid_flip(1.0);*/
+		_add_spring_forces(dt, 1, 0);
+		/*_transfer_from_grid_pic();*/
+		_transfer_from_grid_flip(1.0);
+		/*_transfer_from_grid_flip(0.95);*/
 	}
 
 	void simulation::seed_box(vec3s start, vec3s size, std::size_t density) {
-		std::minstd_rand rand(std::random_device{}());
 		double small_cell_size = cell_size / density;
 		std::uniform_real_distribution<double> dist(0.0, small_cell_size);
 		vec3d base = grid_offset + vec3d(start) * cell_size;
@@ -79,7 +78,7 @@ namespace fluid {
 					for (std::size_t sx = 0; sx < density; ++sx) {
 						for (std::size_t sy = 0; sy < density; ++sy) {
 							for (std::size_t sz = 0; sz < density; ++sz) {
-								vec3d offset(dist(rand), dist(rand), dist(rand));
+								vec3d offset(dist(random), dist(random), dist(random));
 								particle p;
 								p.position =
 									offset + vec3d(vec3s(sx, sy, sz)) * small_cell_size + cell_offset + base;
@@ -108,11 +107,14 @@ namespace fluid {
 	}
 
 	void simulation::_advect_particles(double dt) {
-		vec3d max_corner = cell_size * vec3d(grid().grid().get_size()) + grid_offset;
+		vec3d
+			skin_width = vec3d(boundary_skin_width, boundary_skin_width, boundary_skin_width),
+			min_corner = grid_offset + skin_width,
+			max_corner = cell_size * vec3d(grid().grid().get_size()) + grid_offset - skin_width;
 		for (particle &p : _particles) {
 			p.position += p.velocity * dt;
 			// clamp the particle back into the grid
-			vec_ops::apply_to(p.position, std::clamp<double>, p.position, grid_offset, max_corner);
+			vec_ops::apply_to(p.position, std::clamp<double>, p.position, min_corner, max_corner);
 		}
 	}
 
@@ -236,6 +238,40 @@ namespace fluid {
 					t
 					);
 			p.velocity = new_velocity + (p.velocity - old_velocity) * blend;
+		}
+	}
+
+	void simulation::_add_spring_forces(double dt, std::size_t step, std::size_t substep) {
+		double re = cell_size / std::sqrt(2.0); // some kind of radius
+		// in apic2d, this distribution is actually (0, 1), not sure why
+		std::uniform_real_distribution<double> dist(-1.0, 1.0);
+		double min_dist = 0.1 * re;
+		for (std::size_t i = 0; i < _particles.size(); ++i) {
+			if (i % step == substep) {
+				particle &p = _particles[i];
+				vec3d spring;
+				_space_hash.for_all_nearby_objects(
+					p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
+					[&](const particle &other) {
+						if (&other != &p) {
+							vec3d offset = p.position - other.position;
+							double sqr_dist = offset.squared_length();
+							if (sqr_dist < min_dist * min_dist) {
+								// the two particles are not too far away, so just add a random force to avoid
+								// floating point errors
+								// apic2d multiplies this value by 0.01 * dt here
+								spring += re * vec3d(dist(random), dist(random), dist(random));
+							} else {
+								double kernel = std::max(
+									std::pow(1.0 - sqr_dist / (cell_size * cell_size), 3.0), 0.0
+								);
+								spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
+							}
+						}
+					}
+				);
+				p.position += spring * dt;
+			}
 		}
 	}
 }

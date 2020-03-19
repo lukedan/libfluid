@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <atomic>
 #include <thread>
 #include <mutex>
@@ -13,16 +14,19 @@
 
 #include "simulation.h"
 #include "data_structures/grid.h"
+#include "mesher.h"
 
 using fluid::vec2d;
 using fluid::vec3d;
 using fluid::vec3s;
 
 
+using glmesh = fluid::mesh<GLfloat, GLubyte, GLfloat, GLuint>;
+
 std::atomic_bool
-	sim_paused = true,
-	sim_reset = true;
-std::atomic_size_t sim_advance = 0;
+sim_paused = true,
+sim_reset = true,
+sim_advance = false;
 vec3d sim_grid_offset;
 vec3s sim_grid_size(50, 50, 50);
 double sim_cell_size = 1.0;
@@ -30,8 +34,11 @@ std::mutex sim_particles_lock;
 std::vector<vec3d> sim_particles;
 fluid::grid3<std::size_t> sim_grid_occupation;
 fluid::grid3<vec3d> sim_grid_velocities;
+bool sim_mesh_valid = false;
 
-void update_particles(const fluid::simulation &sim) {
+fluid::semaphore sim_mesher_sema;
+
+void update_simulation(const fluid::simulation &sim) {
 	// collect particles
 	std::vector<vec3d> new_particles;
 	for (const auto &particle : sim.particles()) {
@@ -62,10 +69,12 @@ void update_particles(const fluid::simulation &sim) {
 		sim_particles = std::move(new_particles);
 		sim_grid_occupation = std::move(grid);
 		sim_grid_velocities = std::move(grid_vels);
+		sim_mesh_valid = false;
+		sim_mesher_sema.notify();
 	}
 }
 
-void worker_thread() {
+void simulation_thread() {
 	fluid::simulation sim;
 
 	sim.resize(sim_grid_size);
@@ -76,12 +85,15 @@ void worker_thread() {
 		if (sim_reset) {
 			sim.particles().clear();
 
-			/*sim.seed_box(fluid::vec3s(20, 20, 20), fluid::vec3s(10, 10, 10));*/
-			sim.seed_box(fluid::vec3s(15, 15, 15), fluid::vec3s(20, 20, 20));
-			/*sim.seed_box(fluid::vec3s(10, 10, 10), fluid::vec3s(30, 30, 30));*/
+			/*sim.seed_box(vec3s(20, 20, 20), vec3s(10, 10, 10));*/
+			/*sim.seed_box(vec3s(15, 15, 15), vec3s(20, 20, 20));*/
+			/*sim.seed_box(vec3s(10, 10, 10), vec3s(30, 30, 30));*/
 			/*sim.seed_box(vec3s(0, 0, 0), vec3s(10, 50, 50));*/
 
-			update_particles(sim);
+			sim.seed_box(vec3s(20, 35, 20), vec3s(10, 10, 10));
+			sim.seed_box(vec3s(0, 0, 0), vec3s(50, 15, 50));
+
+			update_simulation(sim);
 			sim_reset = false;
 		}
 
@@ -89,23 +101,66 @@ void worker_thread() {
 		if (!sim_paused) {
 			update = true;
 		}
-		if (sim_advance > 0) {
+		if (sim_advance) {
 			update = true;
-			--sim_advance;
+			sim_advance = false;
 		}
 		if (update) {
 			sim.update(1.0 / 30.0);
-			update_particles(sim);
+			update_simulation(sim);
+		}
+	}
+}
+
+
+std::mutex sim_mesh_lock;
+glmesh sim_mesh;
+
+void mesher_thread() {
+	while (true) {
+		sim_mesher_sema.wait();
+		std::vector<vec3d> particles;
+		{
+			std::lock_guard<std::mutex> lock(sim_particles_lock);
+			if (sim_mesh_valid) {
+				continue;
+			}
+			particles = sim_particles;
+			sim_mesh_valid = true;
+		}
+
+		fluid::mesher mesher;
+		mesher.grid_offset = vec3d(-1.0, -1.0, -1.0);
+		mesher.cell_size = 0.5;
+		mesher.particle_extent = 2.0; // TODO what effects does this have?
+		mesher.cell_radius = 3;
+		mesher.resize(vec3s(104, 104, 104));
+		fluid::mesher::mesh_t mesh = mesher.generate_mesh(particles, 0.5);
+		glmesh resmesh;
+		for (vec3d v : mesh.positions) {
+			resmesh.positions.emplace_back(v);
+		}
+		for (std::size_t i : mesh.indices) {
+			resmesh.indices.emplace_back(static_cast<GLuint>(i));
+		}
+		for (vec3d n : mesh.normals) {
+			resmesh.normals.emplace_back(n);
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(sim_mesh_lock);
+			sim_mesh = std::move(resmesh);
 		}
 	}
 }
 
 
 bool
-	rotating = false,
-	draw_particles = true,
-	draw_cells = true,
-	draw_faces = false;
+rotating = false,
+draw_particles = true,
+draw_cells = true,
+draw_faces = false,
+draw_mesh = true;
 vec2d mouse, rotation;
 
 // callbacks
@@ -119,7 +174,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			sim_reset = true;
 			break;
 		case GLFW_KEY_SPACE:
-			++sim_advance;
+			sim_advance = true;
 			break;
 
 		case GLFW_KEY_P:
@@ -130,6 +185,17 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			break;
 		case GLFW_KEY_F:
 			draw_faces = !draw_faces;
+			break;
+		case GLFW_KEY_M:
+			draw_mesh = !draw_mesh;
+			break;
+
+		case GLFW_KEY_S:
+			{
+				std::lock_guard<std::mutex> guard(sim_particles_lock);
+				std::ofstream fout("mesh.obj");
+				sim_mesh.save_obj(fout);
+			}
 			break;
 		}
 	}
@@ -177,24 +243,17 @@ int main() {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	/*glEnable(GL_LIGHTING);
-	GLfloat color[]{ 1, 1, 1, 1 };
-	glLightfv(GL_LIGHT0, GL_DIFFUSE, color);
-	GLfloat dir[]{ -1, -1, -1, 0 };
-	glLightfv(GL_LIGHT0, GL_POSITION, dir);
-
-	GLfloat diffuse[]{ 1, 1, 1, 1 };
-	glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, diffuse);*/
-
 	int width, height;
 	glfwGetWindowSize(window, &width, &height);
 	resize_callback(window, width, height);
 
-	std::thread t(worker_thread);
-	t.detach();
+	std::thread sim_thread(simulation_thread);
+	std::thread mesh_thread(mesher_thread);
+	sim_thread.detach();
+	mesh_thread.detach();
 
 	while (!glfwWindowShouldClose(window)) {
-		glClear(GL_COLOR_BUFFER_BIT);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
@@ -202,6 +261,8 @@ int main() {
 		glRotated(rotation.y, 1, 0, 0);
 		glRotated(rotation.x, 0, 1, 0);
 		glTranslatef(-25, -25, -25);
+
+		glEnable(GL_DEPTH_TEST);
 
 		glBegin(GL_LINES);
 		vec3d
@@ -250,6 +311,45 @@ int main() {
 		glVertex3d(max_corner.x, max_corner.y, max_corner.z);
 
 		glEnd();
+
+		if (draw_mesh) {
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_FRONT);
+
+			glEnable(GL_LIGHTING);
+
+			glEnable(GL_LIGHT0);
+			GLfloat color1[]{ 1, 1, 1, 1 };
+			glLightfv(GL_LIGHT0, GL_DIFFUSE, color1);
+			GLfloat dir1[]{ -1, -1, -1, 0 };
+			glLightfv(GL_LIGHT0, GL_POSITION, dir1);
+
+			glEnable(GL_LIGHT1);
+			GLfloat color2[]{ 1, 1, 1, 1 };
+			glLightfv(GL_LIGHT1, GL_DIFFUSE, color2);
+			GLfloat dir2[]{ 1, -1, 1, 0 };
+			glLightfv(GL_LIGHT1, GL_POSITION, dir2);
+
+			glEnable(GL_COLOR_MATERIAL);
+			glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT | GL_DIFFUSE);
+
+			glBegin(GL_TRIANGLES);
+			glColor4d(0.5, 0.5, 1.0, 0.2);
+			{
+				std::lock_guard<std::mutex> guard(sim_mesh_lock);
+				for (std::size_t i = 0; i < sim_mesh.indices.size(); ++i) {
+					fluid::vec3<GLfloat> v = sim_mesh.positions[i];
+					fluid::vec3<GLfloat> n = sim_mesh.normals[i];
+					glNormal3f(n.x, n.y, n.z);
+					glVertex3f(v.x, v.y, v.z);
+				}
+			}
+			glEnd();
+
+			glDisable(GL_LIGHTING);
+		}
+
+		glDisable(GL_DEPTH_TEST);
 
 		if (draw_faces) {
 			glBegin(GL_LINES);

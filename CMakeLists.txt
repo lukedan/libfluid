@@ -9,10 +9,13 @@ add_library(fluid)
 target_compile_features(fluid
 	PUBLIC cxx_std_17)
 target_include_directories(fluid
+	PUBLIC
+		3rdparty/pcg-cpp/include
 	INTERFACE src/)
 target_sources(fluid
 	PRIVATE
 		src/data_structures/fluid_grid.cpp
+		src/mesher.cpp
 		src/pressure_solver.cpp
 		src/simulation.cpp)
 

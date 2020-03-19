@@ -12,5 +12,5 @@ The repository also includes a testbed, which is built depending on the value of
 
 ## Acknowledgements
 
-- [`rlguy/GridFluidSim3D`](https://github.com/rlguy/GridFluidSim3D) helped a lot for the solver implementation (although it does not seem to be strictly a PIC simulation as it claims).
+- [`rlguy/GridFluidSim3D`](https://github.com/rlguy/GridFluidSim3D) helped a lot for the solver implementation.
 - [`nepluno/apic2d`](https://github.com/nepluno/apic2d) is a good reference of the general algorithm.
