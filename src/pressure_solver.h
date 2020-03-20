@@ -6,7 +6,7 @@
 #include <tuple>
 
 #include "math/vec.h"
-#include "data_structures/fluid_grid.h"
+#include "fluid_grid.h"
 #include "simulation.h"
 
 namespace fluid {
@@ -39,7 +39,7 @@ namespace fluid {
 			tau = 0.97, ///< The tau value.
 			sigma = 0.25, ///< The sigma value.
 			tolerance = 1e-6; ///< The tolerance for terminating the algorithm.
-		std::size_t max_iterations = 10000; ///< The maximum number of iterations.
+		std::size_t max_iterations = 200; ///< The maximum number of iterations.
 	protected:
 		/// Indicates that a cell is not a fluid cell and does not have an index in \ref _fluid_cells.
 		constexpr static std::size_t _not_a_fluid_cell = std::numeric_limits<std::size_t>::max();

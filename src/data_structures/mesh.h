@@ -25,12 +25,24 @@ namespace fluid {
 
 		/// Saves this mesh to an .OBJ file.
 		void save_obj(std::ostream &out) const {
-			// TODO also save normals
 			for (auto &p : positions) {
 				out << "v " << p.x << " " << p.y << " " << p.z << "\n";
 			}
-			for (std::size_t i = 0; i < indices.size() - 2; i += 3) {
-				out << "f " << indices[i] + 1 << " " << indices[i + 1] + 1 << " " << indices[i + 2] + 1 << "\n";
+			if (!normals.empty()) {
+				for (auto &n : normals) {
+					out << "vn " << n.x << " " << n.y << " " << n.z << "\n";
+				}
+				for (std::size_t i = 0; i < indices.size() - 2; ) {
+					out << "f";
+					for (std::size_t j = 0; j < 3; ++i, ++j) {
+						out << " " << indices[i] << "//" << indices[i];
+					}
+					out << "\n";
+				}
+			} else {
+				for (std::size_t i = 0; i < indices.size() - 2; i += 3) {
+					out << "f " << indices[i] + 1 << " " << indices[i + 1] + 1 << " " << indices[i + 2] + 1 << "\n";
+				}
 			}
 		}
 	};

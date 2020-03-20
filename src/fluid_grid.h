@@ -3,14 +3,13 @@
 /// \file
 /// A MAC grid that stores fluid information including density and velocity.
 
-#include "grid.h"
+#include "data_structures/grid.h"
 
 namespace fluid {
 	class pressure_solver;
 
 	/// Stores the simuation grid.
 	class fluid_grid {
-		//friend pressure_solver;
 	public:
 		/// A cell in the simulation grid.
 		struct cell {
@@ -21,7 +20,9 @@ namespace fluid {
 				solid = 0x4, ///< The cell contains solid.
 			};
 
-			vec3d velocities_posface; ///< The velocities at positive directions.
+			/// The velocities sampled at the centers of faces in the positive direction. Or, if this cell is part of
+			/// a fluid source, then this is the velocity of that source.
+			vec3d velocities_posface;
 			type cell_type = type::air; ///< The contents of this cell.
 		};
 

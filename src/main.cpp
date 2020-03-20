@@ -85,13 +85,22 @@ void simulation_thread() {
 		if (sim_reset) {
 			sim.particles().clear();
 
-			/*sim.seed_box(vec3s(20, 20, 20), vec3s(10, 10, 10));*/
-			sim.seed_box(vec3s(15, 15, 15), vec3s(20, 20, 20));
-			/*sim.seed_box(vec3s(10, 10, 10), vec3s(30, 30, 30));*/
-			/*sim.seed_box(vec3s(0, 0, 0), vec3s(10, 50, 50));*/
+			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
+			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
+			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
+			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
-			/*sim.seed_box(vec3s(20, 35, 20), vec3s(10, 10, 10));
-			sim.seed_box(vec3s(0, 0, 0), vec3s(50, 15, 50));*/
+			sim.seed_sphere(vec3d(25, 40, 25), 5);
+			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));
+
+			/*std::size_t x = 0;
+			for (std::size_t y = 35; y < 45; ++y) {
+				for (std::size_t z = 20; z < 30; ++z) {
+					fluid::fluid_grid::cell &cell = sim.grid().grid()(x, y, z);
+					cell.cell_type = fluid::fluid_grid::cell::type::solid;
+					cell.velocities_posface = vec3d(100.0, 0.0, 0.0);
+				}
+			}*/
 
 			update_simulation(sim);
 			sim_reset = false;
@@ -106,6 +115,14 @@ void simulation_thread() {
 			sim_advance = false;
 		}
 		if (update) {
+			/*for (std::size_t x = 1; x < 5; ++x) {
+				for (std::size_t y = 35; y < 45; ++y) {
+					for (std::size_t z = 20; z < 30; ++z) {
+						sim.seed_cell(vec3s(x, y, z), vec3d(100.0, 0.0, 0.0));
+					}
+				}
+			}*/
+
 			sim.update(1.0 / 30.0);
 			update_simulation(sim);
 		}
@@ -158,7 +175,7 @@ void mesher_thread() {
 bool
 rotating = false,
 draw_particles = true,
-draw_cells = true,
+draw_cells = false,
 draw_faces = false,
 draw_mesh = true;
 vec2d mouse, rotation;
@@ -211,6 +228,7 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
 	vec2d new_mouse(xpos, ypos);
 	if (rotating) {
 		rotation += new_mouse - mouse;
+		rotation.y = std::clamp(rotation.y, -90.0, 90.0);
 	}
 	mouse = new_mouse;
 }

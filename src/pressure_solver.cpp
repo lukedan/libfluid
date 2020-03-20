@@ -80,7 +80,7 @@ namespace fluid {
 
 			{
 				vec3s xpos = pos + vec3s::axis<0>();
-				fluid_grid::cell::type type = _sim.grid().get_cell_and_type(xpos).second;
+				auto [other_cell, type] = _sim.grid().get_cell_and_type(xpos);
 				if (type != fluid_grid::cell::type::solid) {
 					double otherp = 0.0;
 					if (type == fluid_grid::cell::type::fluid) {
@@ -88,13 +88,13 @@ namespace fluid {
 					}
 					cell.velocities_posface.x -= _coeff * (otherp - cur_pressure);
 				} else {
-					cell.velocities_posface.x = _usolid.x;
+					cell.velocities_posface.x = other_cell ? other_cell->velocities_posface.x : 0.0;
 				}
 			}
 
 			{
 				vec3s ypos = pos + vec3s::axis<1>();
-				fluid_grid::cell::type type = _sim.grid().get_cell_and_type(ypos).second;
+				auto [other_cell, type] = _sim.grid().get_cell_and_type(ypos);
 				if (type != fluid_grid::cell::type::solid) {
 					double otherp = 0.0;
 					if (type == fluid_grid::cell::type::fluid) {
@@ -102,13 +102,13 @@ namespace fluid {
 					}
 					cell.velocities_posface.y -= _coeff * (otherp - cur_pressure);
 				} else {
-					cell.velocities_posface.y = _usolid.y;
+					cell.velocities_posface.y = other_cell ? other_cell->velocities_posface.y : 0.0;
 				}
 			}
 
 			{
 				vec3s zpos = pos + vec3s::axis<2>();
-				fluid_grid::cell::type type = _sim.grid().get_cell_and_type(zpos).second;
+				auto [other_cell, type] = _sim.grid().get_cell_and_type(zpos);
 				if (type != fluid_grid::cell::type::solid) {
 					double otherp = 0.0;
 					if (type == fluid_grid::cell::type::fluid) {
@@ -116,7 +116,7 @@ namespace fluid {
 					}
 					cell.velocities_posface.z -= _coeff * (otherp - cur_pressure);
 				} else {
-					cell.velocities_posface.z = _usolid.z;
+					cell.velocities_posface.z = other_cell ? other_cell->velocities_posface.z : 0.0;
 				}
 			}
 
@@ -124,24 +124,18 @@ namespace fluid {
 			if (auto [xneg_cell, type] = _sim.grid().get_cell_and_type(pos - vec3s::axis<0>()); xneg_cell) {
 				if (type == fluid_grid::cell::type::air) {
 					xneg_cell->velocities_posface.x -= _coeff * cur_pressure;
-				} else if (type == fluid_grid::cell::type::solid) {
-					xneg_cell->velocities_posface.x = _usolid.x;
-				}
+				} // no need to update for solid cells
 			}
 
 			if (auto [yneg_cell, type] = _sim.grid().get_cell_and_type(pos - vec3s::axis<1>()); yneg_cell) {
 				if (type == fluid_grid::cell::type::air) {
 					yneg_cell->velocities_posface.y -= _coeff * cur_pressure;
-				} else if (type == fluid_grid::cell::type::solid) {
-					yneg_cell->velocities_posface.y = _usolid.y;
 				}
 			}
 
 			if (auto [zneg_cell, type] = _sim.grid().get_cell_and_type(pos - vec3s::axis<2>()); zneg_cell) {
 				if (type == fluid_grid::cell::type::air) {
 					zneg_cell->velocities_posface.z -= _coeff * cur_pressure;
-				} else if (type == fluid_grid::cell::type::solid) {
-					zneg_cell->velocities_posface.z = _usolid.z;
 				}
 			}
 		}
@@ -158,6 +152,7 @@ namespace fluid {
 		{ 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { -1, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }
 	};
 	void pressure_solver::_compute_a_matrix() {
+		_a.clear();
 		_a.reserve(_fluid_cells.size());
 		for (std::size_t i = 0; i < _fluid_cells.size(); ++i) { // border cells
 			cell_data data;
@@ -189,38 +184,50 @@ namespace fluid {
 				const fluid_grid::cell &cell = _sim.grid().grid()(pos.x - 1, pos.y, pos.z);
 				value += cell.velocities_posface.x;
 				if (cell.cell_type == fluid_grid::cell::type::solid) {
-					value += _usolid.x - cell.velocities_posface.x;
+					value += cell.velocities_posface.x - cell.velocities_posface.x;
 				}
-			} else {
-				value += _usolid.x;
 			}
 			if (pos.y > 0) {
 				const fluid_grid::cell &cell = _sim.grid().grid()(pos.x, pos.y - 1, pos.z);
 				value += cell.velocities_posface.y;
 				if (cell.cell_type == fluid_grid::cell::type::solid) {
-					value += _usolid.y - cell.velocities_posface.y;
+					value += cell.velocities_posface.y - cell.velocities_posface.y;
 				}
-			} else {
-				value += _usolid.y;
 			}
 			if (pos.z > 0) {
 				const fluid_grid::cell &cell = _sim.grid().grid()(pos.x, pos.y, pos.z - 1);
 				value += cell.velocities_posface.z;
 				if (cell.cell_type == fluid_grid::cell::type::solid) {
-					value += _usolid.z - cell.velocities_posface.z;
+					value += cell.velocities_posface.z - cell.velocities_posface.z;
 				}
-			} else {
-				value += _usolid.z;
 			}
 
-			if (_sim.grid().get_cell_and_type(pos + vec3s::axis<0>()).second == fluid_grid::cell::type::solid) {
-				value += vel.x - _usolid.x;
+			{
+				auto [cell, type] = _sim.grid().get_cell_and_type(pos + vec3s::axis<0>());
+				if (type == fluid_grid::cell::type::solid) {
+					value += vel.x;
+					if (cell) {
+						value -= cell->velocities_posface.x;
+					}
+				}
 			}
-			if (_sim.grid().get_cell_and_type(pos + vec3s::axis<1>()).second == fluid_grid::cell::type::solid) {
-				value += vel.y - _usolid.y;
+			{
+				auto [cell, type] = _sim.grid().get_cell_and_type(pos + vec3s::axis<1>());
+				if (type == fluid_grid::cell::type::solid) {
+					value += vel.y;
+					if (cell) {
+						value -= cell->velocities_posface.y;
+					}
+				}
 			}
-			if (_sim.grid().get_cell_and_type(pos + vec3s::axis<2>()).second == fluid_grid::cell::type::solid) {
-				value += vel.z - _usolid.z;
+			{
+				auto [cell, type] = _sim.grid().get_cell_and_type(pos + vec3s::axis<2>());
+				if (type == fluid_grid::cell::type::solid) {
+					value += vel.z;
+					if (cell) {
+						value -= cell->velocities_posface.z;
+					}
+				}
 			}
 
 			b[i] = scale * value;

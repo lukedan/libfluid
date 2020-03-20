@@ -31,8 +31,9 @@ namespace fluid {
 
 	void simulation::time_step(double dt) {
 		std::cout << "  timestep " << dt << "\n";
+		_add_spring_forces(dt, 1, 0);
 		_advect_particles(dt);
-		_hash_particles();
+		hash_particles();
 		_transfer_to_grid_pic_flip();
 		_old_grid = _grid;
 		_remove_boundary_velocities(_old_grid);
@@ -63,38 +64,76 @@ namespace fluid {
 			}
 			std::cerr << "    max velocity = " << std::sqrt(maxv) << "\n";
 		}
-		_add_spring_forces(dt, 1, 0);
 		/*_transfer_from_grid_pic();*/
 		_transfer_from_grid_flip(1.0);
 		/*_transfer_from_grid_flip(0.95);*/
 	}
 
-	void simulation::seed_box(vec3s start, vec3s size, std::size_t density) {
-		double small_cell_size = cell_size / density;
-		std::uniform_real_distribution<double> dist(0.0, small_cell_size);
-		vec3d base = grid_offset + vec3d(start) * cell_size;
-		for (std::size_t z = 0; z < size.z; ++z) {
-			for (std::size_t y = 0; y < size.y; ++y) {
-				for (std::size_t x = 0; x < size.x; ++x) {
-					vec3d cell_offset = vec3d(vec3s(x, y, z)) * cell_size;
-					for (std::size_t sx = 0; sx < density; ++sx) {
-						for (std::size_t sy = 0; sy < density; ++sy) {
-							for (std::size_t sz = 0; sz < density; ++sz) {
-								vec3d offset(dist(random), dist(random), dist(random));
-								particle p;
-								p.position =
-									offset + vec3d(vec3s(sx, sy, sz)) * small_cell_size + cell_offset + base;
-								_particles.emplace_back(p);
-							}
-						}
-					}
-				}
-			}
+	void simulation::seed_cell(vec3s cell, vec3d velocity, std::size_t density) {
+		std::size_t
+			index = grid().grid().index_to_raw(cell),
+			num = _space_hash.get_objects_at(cell).size(),
+			target = density * density * density;
+		std::uniform_real_distribution<double> dist(0.0, cell_size);
+		vec3d offset = grid_offset + vec3d(cell) * cell_size;
+		for (; num < target; ++num) {
+			particle p;
+			p.grid_index = cell;
+			p.position = offset + vec3d(dist(random), dist(random), dist(random));
+			p.velocity = velocity;
+			_space_hash.add_object_at_raw(index, p);
+			_particles.emplace_back(p);
 		}
 	}
 
+	void simulation::seed_box(vec3d start, vec3d size, std::size_t density) {
+		vec3d end = start + size;
+		vec3s
+			start_cell = world_position_to_cell_index_unclamped(start),
+			end_cell = world_position_to_cell_index_unclamped(end);
+		seed_func(
+			start_cell, end_cell - start_cell + vec3s(1, 1, 1),
+			[&](vec3d pos) {
+				return
+					pos.x > start.x && pos.y > start.y && pos.z > start.z &&
+					pos.x < end.x && pos.y < end.y && pos.z < end.z;
+			},
+			density
+				);
+	}
+
+	void simulation::seed_sphere(vec3d center, double radius, std::size_t density) {
+		vec3s
+			start_cell = world_position_to_cell_index_unclamped(center - vec3d(radius, radius, radius)),
+			end_cell = world_position_to_cell_index_unclamped(center + vec3d(radius, radius, radius));
+		double sqr_radius = radius * radius;
+		seed_func(
+			start_cell, end_cell - start_cell + vec3s(1, 1, 1),
+			[&](vec3d pos) {
+				return (pos - center).squared_length() < sqr_radius;
+			},
+			density
+				);
+	}
+
+	vec3s simulation::world_position_to_cell_index(vec3d pos) const {
+		return vec_ops::apply<vec3s>(
+			static_cast<const std::size_t & (*)(const std::size_t&, const std::size_t&)>(std::min),
+			world_position_to_cell_index_unclamped(pos), grid().grid().get_size()
+		);
+	}
+
+	vec3s simulation::world_position_to_cell_index_unclamped(vec3d pos) const {
+		return vec_ops::apply<vec3s>(
+			[](double v) {
+				return static_cast<std::size_t>(std::max(v, 0.0));
+			},
+			(pos - grid_offset) / cell_size
+				);
+	}
+
 	double simulation::cfl() const {
-		double maxlen = 0.0f;
+		double maxlen = 0.0;
 		for (const particle &p : particles()) {
 			maxlen = std::max(maxlen, p.velocity.squared_length());
 		}
@@ -105,7 +144,10 @@ namespace fluid {
 		// TODO more kernels
 		// this is the linear kernel
 		p /= cell_size;
-		return std::max((1.0 - std::abs(p.x)) * (1.0 - std::abs(p.y)) * (1.0 - std::abs(p.z)), 0.0);
+		return
+			std::max(0.0, 1.0 - std::abs(p.x)) *
+			std::max(0.0, 1.0 - std::abs(p.y)) *
+			std::max(0.0, 1.0 - std::abs(p.z));
 	}
 
 	void simulation::_advect_particles(double dt) {
@@ -120,7 +162,7 @@ namespace fluid {
 		}
 	}
 
-	void simulation::_hash_particles() {
+	void simulation::hash_particles() {
 		_space_hash.clear();
 		for (particle &p : _particles) {
 			vec3d grid_pos = (p.position - grid_offset) / cell_size;
@@ -142,37 +184,40 @@ namespace fluid {
 			for (std::size_t y = 0; y < grid().grid().get_size().y; ++y, ypos += cell_size) {
 				double ypos_face = ypos + half_cell, xpos = grid_offset.x + half_cell;
 				for (std::size_t x = 0; x < grid().grid().get_size().x; ++x, xpos += cell_size) {
-					double xpos_face = xpos + half_cell;
-
-					vec3d sum_vel, sum_weight;
-					vec3d
-						xface(xpos_face, ypos, zpos),
-						yface(xpos, ypos_face, zpos),
-						zface(xpos, ypos, zpos_face);
-					_space_hash.for_all_nearby_objects(
-						vec3s(x, y, z), vec3s(1, 1, 1), vec3s(1, 1, 1),
-						[&](particle &p) {
-							vec3d weights(
-								_kernel(p.position - xface),
-								_kernel(p.position - yface),
-								_kernel(p.position - zface)
-							);
-							sum_weight += weights;
-							sum_vel += vec_ops::memberwise::mul(weights, p.velocity);
-						}
-					);
 					fluid_grid::cell &cell = grid().grid()(x, y, z);
-					cell.cell_type = fluid_grid::cell::type::air;
-					if (!_space_hash.get_objects_at(vec3s(x, y, z)).empty()) {
-						cell.cell_type = fluid_grid::cell::type::fluid;
+					if (cell.cell_type != fluid_grid::cell::type::solid) {
+						double xpos_face = xpos + half_cell;
+
+						vec3d sum_vel, sum_weight;
+						vec3d
+							xface(xpos_face, ypos, zpos),
+							yface(xpos, ypos_face, zpos),
+							zface(xpos, ypos, zpos_face);
+						_space_hash.for_all_nearby_objects(
+							vec3s(x, y, z), vec3s(1, 1, 1), vec3s(1, 1, 1),
+							[&](particle &p) {
+								vec3d weights(
+									_kernel(p.position - xface),
+									_kernel(p.position - yface),
+									_kernel(p.position - zface)
+								);
+								sum_weight += weights;
+								sum_vel += vec_ops::memberwise::mul(weights, p.velocity);
+							}
+						);
+
+						cell.cell_type = fluid_grid::cell::type::air;
+						if (!_space_hash.get_objects_at(vec3s(x, y, z)).empty()) {
+							cell.cell_type = fluid_grid::cell::type::fluid;
+						}
+						vec_ops::apply_to(
+							cell.velocities_posface,
+							[](double vel, double weight) {
+								return weight > 1e-6 ? vel / weight : 0.0; // TODO magic number
+							},
+							sum_vel, sum_weight
+								);
 					}
-					vec_ops::apply_to(
-						cell.velocities_posface,
-						[](double vel, double weight) {
-							return weight > 1e-6 ? vel / weight : 0.0; // TODO magic number
-						},
-						sum_vel, sum_weight
-							);
 				}
 			}
 		}

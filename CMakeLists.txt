@@ -14,7 +14,7 @@ target_include_directories(fluid
 	INTERFACE src/)
 target_sources(fluid
 	PRIVATE
-		src/data_structures/fluid_grid.cpp
+		src/fluid_grid.cpp
 		src/mesher.cpp
 		src/pressure_solver.cpp
 		src/simulation.cpp)
