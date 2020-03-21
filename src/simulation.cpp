@@ -19,7 +19,7 @@ namespace fluid {
 	void simulation::update(double dt) {
 		std::cout << "update\n";
 		while (true) {
-			double ts = 3.0 * cfl();
+			double ts = cfl_number * cfl();
 			if (ts > dt) {
 				time_step(dt);
 				break;
@@ -31,12 +31,10 @@ namespace fluid {
 
 	void simulation::time_step(double dt) {
 		std::cout << "  timestep " << dt << "\n";
-		_add_spring_forces(dt, 1, 0);
+		/*_add_spring_forces(dt, 1, 0);*/
 		_advect_particles(dt);
 		hash_particles();
-		_transfer_to_grid_pic_flip();
-		_old_grid = _grid;
-		_remove_boundary_velocities(_old_grid);
+		_transfer_to_grid();
 		// add external forces
 		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z) {
 			for (std::size_t y = 0; y < grid().grid().get_size().y; ++y) {
@@ -64,9 +62,11 @@ namespace fluid {
 			}
 			std::cerr << "    max velocity = " << std::sqrt(maxv) << "\n";
 		}
-		/*_transfer_from_grid_pic();*/
-		_transfer_from_grid_flip(1.0);
-		/*_transfer_from_grid_flip(0.95);*/
+		_transfer_from_grid();
+	}
+
+	void simulation::time_step() {
+		time_step(std::min(cfl_number * cfl(), 0.033));
 	}
 
 	void simulation::seed_cell(vec3s cell, vec3d velocity, std::size_t density) {
@@ -176,7 +176,7 @@ namespace fluid {
 		}
 	}
 
-	void simulation::_transfer_to_grid_pic_flip() {
+	void simulation::_transfer_to_grid_pic() {
 		double half_cell = 0.5 * cell_size;
 		double zpos = grid_offset.z + half_cell;
 		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z, zpos += cell_size) {
@@ -223,6 +223,79 @@ namespace fluid {
 		}
 	}
 
+	void simulation::_transfer_to_grid_flip() {
+		_transfer_from_grid_pic();
+		_old_grid = _grid;
+		_remove_boundary_velocities(_old_grid);
+	}
+
+	void simulation::_transfer_to_grid_apic() {
+		double half_cell = 0.5 * cell_size;
+		double zpos = grid_offset.z + half_cell;
+		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z, zpos += cell_size) {
+			double zpos_face = zpos + half_cell, ypos = grid_offset.y + half_cell;
+			for (std::size_t y = 0; y < grid().grid().get_size().y; ++y, ypos += cell_size) {
+				double ypos_face = ypos + half_cell, xpos = grid_offset.x + half_cell;
+				for (std::size_t x = 0; x < grid().grid().get_size().x; ++x, xpos += cell_size) {
+					fluid_grid::cell &cell = grid().grid()(x, y, z);
+					if (cell.cell_type != fluid_grid::cell::type::solid) {
+						double xpos_face = xpos + half_cell;
+
+						vec3d sum_vel, sum_weight;
+						vec3d
+							xface(xpos_face, ypos, zpos),
+							yface(xpos, ypos_face, zpos),
+							zface(xpos, ypos, zpos_face);
+						_space_hash.for_all_nearby_objects(
+							vec3s(x, y, z), vec3s(1, 1, 1), vec3s(1, 1, 1),
+							[&](particle &p) {
+								vec3d
+									weights(
+										_kernel(p.position - xface),
+										_kernel(p.position - yface),
+										_kernel(p.position - zface)
+									),
+									affine(
+										vec_ops::dot(p.cx, xface - p.position),
+										vec_ops::dot(p.cy, yface - p.position),
+										vec_ops::dot(p.cz, zface - p.position)
+									);
+								sum_weight += weights;
+								sum_vel += vec_ops::memberwise::mul(weights, p.velocity + affine);
+							}
+						);
+
+						cell.cell_type = fluid_grid::cell::type::air;
+						if (!_space_hash.get_objects_at(vec3s(x, y, z)).empty()) {
+							cell.cell_type = fluid_grid::cell::type::fluid;
+						}
+						vec_ops::apply_to(
+							cell.velocities_posface,
+							[](double vel, double weight) {
+								return weight > 1e-6 ? vel / weight : 0.0; // TODO magic number
+							},
+							sum_vel, sum_weight
+								);
+					}
+				}
+			}
+		}
+	}
+
+	void simulation::_transfer_to_grid() {
+		switch (simulation_method) {
+		case method::pic:
+			_transfer_to_grid_pic();
+			break;
+		case method::flip_blend:
+			_transfer_to_grid_flip();
+			break;
+		case method::apic:
+			_transfer_to_grid_apic();
+			break;
+		}
+	}
+
 	vec3d simulation::_get_negative_face_velocities(const fluid_grid &grid, vec3s id) {
 		vec3d neg_vel;
 		if (id.x > 0) {
@@ -260,9 +333,7 @@ namespace fluid {
 			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
 			vec_ops::apply_to(
 				p.velocity,
-				[](double a, double b, double t) {
-					return a * (1.0 - t) + b * t;
-				},
+				lerp<double>,
 				_get_negative_face_velocities(_grid, p.grid_index), cell.velocities_posface, t
 					);
 		}
@@ -288,13 +359,151 @@ namespace fluid {
 		}
 	}
 
+	/// Computes the gradient vector.
+	vec3d _grad(
+		// zyx order
+		double v000, double v001, double v010, double v011,
+		double v100, double v101, double v110, double v111,
+		double fx, double fy, double fz
+		) {
+		// double xg =
+		//	lerp(lerp(v001, v011, fy), lerp(v101, v111, fy), fz) -
+		//	lerp(lerp(v000, v010, fy), lerp(v100, v110, fy), fz)
+		// f000(-(1.0 - fy) * (1.0 - fz), -(1.0 - fx) * (1.0 - fz), -(1.0 - fx) * (1.0 - fy))
+		// f001( (1.0 - fy) * (1.0 - fz), -       fx  * (1.0 - fz), -       fx  * (1.0 - fy))
+		// f010(-       fy  * (1.0 - fz),  (1.0 - fx) * (1.0 - fz), -(1.0 - fx) *        fy )
+		// f011(        fy  * (1.0 - fz),         fx  * (1.0 - fz), -       fx  *        fy )
+		// f100(-(1.0 - fy) *        fz , -(1.0 - fx) *        fz ,  (1.0 - fx) * (1.0 - fy))
+		// f101( (1.0 - fy) *        fz , -       fx  *        fz ,         fx  * (1.0 - fy))
+		// f110(-       fy  *        fz ,  (1.0 - fx) *        fz ,  (1.0 - fx) *        fy )
+		// f111(        fy  *        fz ,         fx  *        fz ,         fx  *        fy )
+		vec3d
+			f000(-(1.0 - fy) * (1.0 - fz), -(1.0 - fx) * (1.0 - fz), -(1.0 - fx) * (1.0 - fy)),
+			f001((1.0 - fy) * (1.0 - fz), -fx * (1.0 - fz), -fx * (1.0 - fy)),
+			f010(-fy * (1.0 - fz), (1.0 - fx) * (1.0 - fz), -(1.0 - fx) * fy),
+			f011(fy * (1.0 - fz), fx * (1.0 - fz), -fx * fy),
+			f100(-(1.0 - fy) * fz, -(1.0 - fx) * fz, (1.0 - fx) * (1.0 - fy)),
+			f101((1.0 - fy) * fz, -fx * fz, fx * (1.0 - fy)),
+			f110(-fy * fz, (1.0 - fx) * fz, (1.0 - fx) * fy),
+			f111(fy * fz, fx * fz, fx * fy);
+		return
+			f000 * v000 + f001 * v001 + f010 * v010 + f011 * v011 +
+			f100 * v100 + f101 * v101 + f110 * v110 + f111 * v111;
+	}
+	/// Clamps the input value, returning both the result and whether the value has been modified. Note that this
+	/// function returns clamped for the max value, so that velocities at the max borders are ignored.
+	std::pair<std::size_t, bool> _clamp(std::size_t val, std::size_t min, std::size_t max) {
+		if (val < min) {
+			return { min, true };
+		}
+		if (val >= max) {
+			return { max, true };
+		}
+		return { val, false };
+	}
+	void simulation::_transfer_from_grid_apic() {
+		for (particle &p : _particles) {
+			const fluid_grid::cell &cell = grid().grid()(p.grid_index);
+			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
+
+			// compute velocity
+			vec_ops::apply_to(
+				p.velocity,
+				lerp<double>,
+				_get_negative_face_velocities(_grid, p.grid_index), cell.velocities_posface, t
+					);
+
+			// compute c vectors
+			//         z  y  x
+			vec3d vels[3][3][3];
+			for (std::size_t dz = 0; dz < 3; ++dz) {
+				auto [cz, zclamp] = _clamp(p.grid_index.z + dz, 1, grid().grid().get_size().z);
+				--cz;
+				for (std::size_t dy = 0; dy < 3; ++dy) {
+					auto [cy, yclamp] = _clamp(p.grid_index.y + dy, 1, grid().grid().get_size().y);
+					--cy;
+					for (std::size_t dx = 0; dx < 3; ++dx) {
+						auto [cx, xclamp] = _clamp(p.grid_index.x + dx, 1, grid().grid().get_size().x);
+						--cx;
+
+						vec3d vel = grid().grid()(cx, cy, cz).velocities_posface;
+						if (xclamp) {
+							vel.x = 0.0;
+						}
+						if (yclamp) {
+							vel.y = 0.0;
+						}
+						if (zclamp) {
+							vel.z = 0.0;
+						}
+						vels[dz][dy][dx] = vel;
+					}
+				}
+			}
+			std::size_t dx = 1, dy = 1, dz = 1;
+			vec3d tmid = t - vec3d(0.5, 0.5, 0.5);
+			if (tmid.x < 0.0) {
+				dx = 0;
+				tmid.x += 1.0;
+			}
+			if (tmid.y < 0.0) {
+				dy = 0;
+				tmid.y += 1.0;
+			}
+			if (tmid.z < 0.0) {
+				dz = 0;
+				tmid.z += 1.0;
+			}
+			// v000(vels[dz    ][dy    ][0].x, vels[dz    ][0][dx    ].y, vels[0][dy    ][dx    ].z)
+			// v001(vels[dz    ][dy    ][1].x, vels[dz    ][0][dx + 1].y, vels[0][dy    ][dx + 1].z)
+			// v010(vels[dz    ][dy + 1][0].x, vels[dz    ][1][dx    ].y, vels[0][dy + 1][dx    ].z)
+			// v011(vels[dz    ][dy + 1][1].x, vels[dz    ][1][dx + 1].y, vels[0][dy + 1][dx + 1].z)
+			// v100(vels[dz + 1][dy    ][0].x, vels[dz + 1][0][dx    ].y, vels[1][dy    ][dx    ].z)
+			// v101(vels[dz + 1][dy    ][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy    ][dx + 1].z)
+			// v110(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx    ].y, vels[1][dy + 1][dx    ].z)
+			// v111(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z)
+			vec3d
+				v000(vels[dz][dy][0].x, vels[dz][0][dx].y, vels[0][dy][dx].z),
+				v001(vels[dz][dy][1].x, vels[dz][0][dx + 1].y, vels[0][dy][dx + 1].z),
+				v010(vels[dz][dy + 1][0].x, vels[dz][1][dx].y, vels[0][dy + 1][dx].z),
+				v011(vels[dz][dy + 1][1].x, vels[dz][1][dx + 1].y, vels[0][dy + 1][dx + 1].z),
+				v100(vels[dz + 1][dy][0].x, vels[dz + 1][0][dx].y, vels[1][dy][dx].z),
+				v101(vels[dz + 1][dy][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy][dx + 1].z),
+				v110(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx].y, vels[1][dy + 1][dx].z),
+				v111(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z);
+			p.cx = _grad(
+				v000.x, v001.x, v010.x, v011.x, v100.x, v101.x, v110.x, v111.x, t.x, tmid.y, tmid.z
+				) / cell_size;
+			p.cy = _grad(
+				v000.y, v001.y, v010.y, v011.y, v100.y, v101.y, v110.y, v111.y, tmid.x, t.y, tmid.z
+				) / cell_size;
+			p.cz = _grad(
+				v000.z, v001.z, v010.z, v011.z, v100.z, v101.z, v110.z, v111.z, tmid.x, tmid.y, t.z
+				) / cell_size;
+		}
+	}
+
+	void simulation::_transfer_from_grid() {
+		switch (simulation_method) {
+		case method::pic:
+			_transfer_from_grid_pic();
+			break;
+		case method::flip_blend:
+			_transfer_from_grid_flip(blending_factor);
+			break;
+		case method::apic:
+			_transfer_from_grid_apic();
+			break;
+		}
+	}
+
 	void simulation::_add_spring_forces(double dt, std::size_t step, std::size_t substep) {
 		double re = cell_size / std::sqrt(2.0); // some kind of radius
 		// in apic2d, this distribution is actually (0, 1), not sure why
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);
 		double min_dist = 0.1 * re;
 		std::vector<vec3d> new_positions(_particles.size());
-#pragma omp parallel
+#pragma omp parallel for
 		for (std::size_t i = substep; i < _particles.size(); i += step) {
 			const particle &p = _particles[i];
 			vec3d spring;

@@ -17,6 +17,13 @@ namespace fluid {
 	/// A fluid simulation.
 	class simulation {
 	public:
+		/// The simulation method.
+		enum class method : unsigned char {
+			pic, ///< PIC.
+			flip_blend, ///< Linear blend between FLIP and PIC.
+			apic ///< APIC.
+		};
+
 		/// The default density used when seeding particles.
 		constexpr static std::size_t default_seeding_density = 2;
 
@@ -27,6 +34,8 @@ namespace fluid {
 		void update(double);
 		/// Takes a single timestep using the given delta time.
 		void time_step(double);
+		/// Takes a single timestep using the default CFL number.
+		void time_step();
 
 		/// Updates \ref _space_hash and \ref particle::grid_index.
 		void hash_particles();
@@ -43,8 +52,8 @@ namespace fluid {
 		) {
 			double small_cell_size = cell_size / density;
 			std::uniform_real_distribution<double> dist(0.0, small_cell_size);
-			vec3s end(vec_ops::apply<vec3d>(
-				static_cast<const double&(*)(const double&, const double&)>(std::min),
+			vec3s end(vec_ops::apply<vec3s>(
+				static_cast<const std::size_t&(*)(const std::size_t&, const std::size_t&)>(std::min),
 				start + size, grid().grid().get_size()
 				));
 			for (std::size_t z = start.z; z < end.z; ++z) {
@@ -100,11 +109,15 @@ namespace fluid {
 			return _particles;
 		}
 
-		vec3d grid_offset; ///< The offset of the grid's origin.
-		double cell_size = std::numeric_limits<double>::quiet_NaN(); ///< The size of each grid cell.
-		double density = 1.0; ///< The density of the fluid.
-		double boundary_skin_width = 0.1; ///< The "skin width" at boundaries to prevent particles from "sticking".
 		pcg32 random; ///< The random engine for the simulation.
+		vec3d grid_offset; ///< The offset of the grid's origin.
+		double
+			cfl_number = 3.0, ///< The CFL number.
+			cell_size = std::numeric_limits<double>::quiet_NaN(), ///< The size of each grid cell.
+			density = 1.0, ///< The density of the fluid.
+			boundary_skin_width = 0.1, ///< The "skin width" at boundaries to prevent particles from "sticking".
+			blending_factor = 1.0; ///< The factor used when blending different method together.
+		method simulation_method = method::apic; ///< The simulation method.
 	private:
 		std::deque<particle> _particles; ///< All particles.
 		fluid_grid
@@ -125,14 +138,26 @@ namespace fluid {
 
 		/// Advects particles.
 		void _advect_particles(double);
-		/// Transfers velocities from particles to the grid.
-		void _transfer_to_grid_pic_flip();
+		
+		/// Transfers velocities from particles to the grid using PIC.
+		void _transfer_to_grid_pic();
+		/// Transfers velocities from particles to the grid using FLIP.
+		void _transfer_to_grid_flip();
+		/// Transfers velocities from particles to the grid using APIC.
+		void _transfer_to_grid_apic();
+		/// Transfers velocities from particles to the grid using \ref simulation_method.
+		void _transfer_to_grid();
+
 		/// Transfers velocities from the grid back to particles using PIC.
 		void _transfer_from_grid_pic();
 		/// Transfers velocities from the grid back to particles using a blend between PIC and FLIP.
 		///
 		/// \param blend The blend factor. 1.0 means fully FLIP.
 		void _transfer_from_grid_flip(double blend);
+		/// Transfers velocities from the grid back to particles using APIC.
+		void _transfer_from_grid_apic();
+		/// Transfers velocities from the grid back to particles using \ref simulation_method.
+		void _transfer_from_grid();
 
 		/// Adds spring forces between particles to reduce clumping. \ref _space_hash must have been filled before
 		/// this is called. This is taken from https://github.com/nepluno/apic2d.

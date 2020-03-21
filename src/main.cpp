@@ -31,7 +31,7 @@ vec3d sim_grid_offset;
 vec3s sim_grid_size(50, 50, 50);
 double sim_cell_size = 1.0;
 std::mutex sim_particles_lock;
-std::vector<vec3d> sim_particles;
+std::vector<fluid::particle> sim_particles;
 fluid::grid3<std::size_t> sim_grid_occupation;
 fluid::grid3<vec3d> sim_grid_velocities;
 bool sim_mesh_valid = false;
@@ -40,10 +40,7 @@ fluid::semaphore sim_mesher_sema;
 
 void update_simulation(const fluid::simulation &sim) {
 	// collect particles
-	std::vector<vec3d> new_particles;
-	for (const auto &particle : sim.particles()) {
-		new_particles.emplace_back(particle.position);
-	}
+	std::vector<fluid::particle> new_particles(sim.particles().begin(), sim.particles().end());
 
 	// collect occupation
 	fluid::grid3<std::size_t> grid(sim.grid().grid().get_size(), 0);
@@ -80,18 +77,20 @@ void simulation_thread() {
 	sim.resize(sim_grid_size);
 	sim.grid_offset = sim_grid_offset;
 	sim.cell_size = sim_cell_size;
+	sim.simulation_method = fluid::simulation::method::apic;
 
 	while (true) {
 		if (sim_reset) {
 			sim.particles().clear();
 
-			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
+			/*sim.seed_box(vec3d(20, 20, 20), vec3d(1, 1, 1));*/
+			sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));
 			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
-			sim.seed_sphere(vec3d(25, 40, 25), 5);
-			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));
+			/*sim.seed_sphere(vec3d(25, 40, 25), 5);
+			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));*/
 
 			/*std::size_t x = 0;
 			for (std::size_t y = 35; y < 45; ++y) {
@@ -106,15 +105,7 @@ void simulation_thread() {
 			sim_reset = false;
 		}
 
-		bool update = false;
 		if (!sim_paused) {
-			update = true;
-		}
-		if (sim_advance) {
-			update = true;
-			sim_advance = false;
-		}
-		if (update) {
 			/*for (std::size_t x = 1; x < 5; ++x) {
 				for (std::size_t y = 35; y < 45; ++y) {
 					for (std::size_t z = 20; z < 30; ++z) {
@@ -124,6 +115,10 @@ void simulation_thread() {
 			}*/
 
 			sim.update(1.0 / 30.0);
+			update_simulation(sim);
+		} else if (sim_advance) {
+			sim_advance = false;
+			sim.time_step();
 			update_simulation(sim);
 		}
 	}
@@ -142,7 +137,9 @@ void mesher_thread() {
 			if (sim_mesh_valid) {
 				continue;
 			}
-			particles = sim_particles;
+			for (const fluid::particle &p : sim_particles) {
+				particles.emplace_back(p.position);
+			}
 			sim_mesh_valid = true;
 		}
 
@@ -178,6 +175,7 @@ draw_particles = true,
 draw_cells = false,
 draw_faces = false,
 draw_mesh = true;
+std::size_t particle_visualization = 1;
 vec2d mouse, rotation;
 
 // callbacks
@@ -403,11 +401,66 @@ int main() {
 
 		if (draw_particles) {
 			glBegin(GL_POINTS);
-			glColor4d(1.0, 1.0, 1.0, 0.3);
 			{
 				std::lock_guard<std::mutex> guard(sim_particles_lock);
-				for (vec3d pos : sim_particles) {
+				
+				double max_vel = 0.0;
+				for (fluid::particle &p : sim_particles) {
+					max_vel = std::max(max_vel, p.velocity.squared_length());
+				}
+				max_vel = std::sqrt(max_vel);
+
+				for (fluid::particle &p : sim_particles) {
+					vec3d pos = p.position;
+					switch (particle_visualization) {
+					case 0:
+						{
+							vec3d vel = fluid::vec_ops::apply<vec3d>(
+								[](double v) {
+									v /= 1.0;
+									if (v > -1.0 && v < 1.0) {
+										v = v < 0.0 ? -1.0 : 1.0;
+									}
+									return std::clamp(std::log(v) + 0.5, 0.0, 1.0);
+								}, vel
+							);
+							glColor4d(vel.x, vel.y, vel.z, 0.3);
+						}
+						break;
+					case 1:
+						{
+							double c = p.velocity.length() / max_vel;
+							glColor4d(1.0, 1.0, 1.0, c * 0.9 + 0.1);
+						}
+						break;
+					}
 					glVertex3d(pos.x, pos.y, pos.z);
+				}
+			}
+			glEnd();
+
+			glBegin(GL_LINES);
+			{
+				std::lock_guard<std::mutex> guard(sim_particles_lock);
+				for (fluid::particle &p : sim_particles) {
+					double mul = 0.01;
+					vec3d
+						pos = p.position,
+						pcx = pos + p.cx * mul,
+						pcy = pos + p.cy * mul,
+						pcz = pos + p.cz * mul;
+
+					glColor4d(1.0, 0.0, 0.0, 1.0);
+					glVertex3d(pos.x, pos.y, pos.z);
+					glVertex3d(pcx.x, pcx.y, pcx.z);
+
+					glColor4d(0.0, 1.0, 0.0, 1.0);
+					glVertex3d(pos.x, pos.y, pos.z);
+					glVertex3d(pcy.x, pcy.y, pcy.z);
+
+					glColor4d(0.0, 0.0, 1.0, 1.0);
+					glVertex3d(pos.x, pos.y, pos.z);
+					glVertex3d(pcz.x, pcz.y, pcz.z);
 				}
 			}
 			glEnd();
