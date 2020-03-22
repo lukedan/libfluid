@@ -50,8 +50,6 @@ namespace fluid {
 		std::vector<cell_data> _a;
 		/// The index of each cell in \ref _fluid_cells. Non-fluid cells have the value \ref _not_a_fluid_cell.
 		grid3<std::size_t> _fluid_cell_indices;
-		/// The velocity of solid objects.
-		vec3d _usolid; // TODO remove this when implementing proper per-object velocities
 		double _a_scale = 0.0; ///< The coefficient that \ref _a should be scaled by.
 		/// The complete list of cells that contain fluid, sorted in the order they're stored in the grid.
 		const std::vector<vec3s> &_fluid_cells;

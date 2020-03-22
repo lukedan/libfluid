@@ -341,54 +341,6 @@ namespace fluid {
 		}
 	}
 
-	void simulation::_transfer_from_grid_pic() {
-		for (particle &p : _particles) {
-			const fluid_grid::cell &cell = grid().grid()(p.grid_index);
-			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
-			vec_ops::apply_to(
-				p.velocity,
-				lerp<double>,
-				_get_negative_face_velocities(_grid, p.grid_index), cell.velocities_posface, t
-					);
-		}
-	}
-
-	void simulation::_transfer_from_grid_flip(double blend) {
-		for (particle &p : _particles) {
-			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
-			vec3d
-				old_velocity = vec_ops::apply<vec3d>(
-					lerp<double>,
-					_get_negative_face_velocities(_old_grid, p.grid_index),
-					_old_grid.grid()(p.grid_index).velocities_posface,
-					t
-					),
-				new_velocity = vec_ops::apply<vec3d>(
-					lerp<double>,
-					_get_negative_face_velocities(_grid, p.grid_index),
-					_grid.grid()(p.grid_index).velocities_posface,
-					t
-					);
-			p.velocity = new_velocity + (p.velocity - old_velocity) * blend;
-		}
-	}
-
-	vec3d simulation::_calculate_c_vector(
-		double v000, double v001, double v010, double v011,
-		double v100, double v101, double v110, double v111,
-		vec3d offset
-	) const {
-		return
-			_grad_kernel(vec3d(offset.x, offset.y, offset.z)) * v000 +
-			_grad_kernel(vec3d(offset.x - 1.0, offset.y, offset.z)) * v001 +
-			_grad_kernel(vec3d(offset.x, offset.y - 1.0, offset.z)) * v010 +
-			_grad_kernel(vec3d(offset.x - 1.0, offset.y - 1.0, offset.z)) * v011 +
-			_grad_kernel(vec3d(offset.x, offset.y, offset.z - 1.0)) * v100 +
-			_grad_kernel(vec3d(offset.x - 1.0, offset.y, offset.z - 1.0)) * v101 +
-			_grad_kernel(vec3d(offset.x, offset.y - 1.0, offset.z - 1.0)) * v110 +
-			_grad_kernel(vec3d(offset.x - 1.0, offset.y - 1.0, offset.z - 1.0)) * v111;
-	}
-
 	/// Clamps the input value, returning both the result and whether the value has been modified. Note that this
 	/// function returns clamped for the max value, so that velocities at the max borders are ignored.
 	std::pair<std::size_t, bool> _clamp(std::size_t val, std::size_t min, std::size_t max) {
@@ -400,83 +352,167 @@ namespace fluid {
 		}
 		return { val, false };
 	}
-	void simulation::_transfer_from_grid_apic() {
-		for (particle &p : _particles) {
-			const fluid_grid::cell &cell = grid().grid()(p.grid_index);
-			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
+	std::pair<simulation::_velocity_sample, vec3d> simulation::_get_face_samples(
+		const fluid_grid &grid, vec3s grid_index, vec3d offset
+	) const {
+		//         z  y  x
+		vec3d vels[3][3][3];
+		for (std::size_t dz = 0; dz < 3; ++dz) {
+			auto [cz, zclamp] = _clamp(grid_index.z + dz, 1, grid.grid().get_size().z);
+			--cz;
+			for (std::size_t dy = 0; dy < 3; ++dy) {
+				auto [cy, yclamp] = _clamp(grid_index.y + dy, 1, grid.grid().get_size().y);
+				--cy;
+				for (std::size_t dx = 0; dx < 3; ++dx) {
+					auto [cx, xclamp] = _clamp(grid_index.x + dx, 1, grid.grid().get_size().x);
+					--cx;
 
-			//         z  y  x
-			vec3d vels[3][3][3];
-			for (std::size_t dz = 0; dz < 3; ++dz) {
-				auto [cz, zclamp] = _clamp(p.grid_index.z + dz, 1, grid().grid().get_size().z);
-				--cz;
-				for (std::size_t dy = 0; dy < 3; ++dy) {
-					auto [cy, yclamp] = _clamp(p.grid_index.y + dy, 1, grid().grid().get_size().y);
-					--cy;
-					for (std::size_t dx = 0; dx < 3; ++dx) {
-						auto [cx, xclamp] = _clamp(p.grid_index.x + dx, 1, grid().grid().get_size().x);
-						--cx;
-
-						vec3d vel = grid().grid()(cx, cy, cz).velocities_posface;
-						if (xclamp) {
-							vel.x = 0.0;
-						}
-						if (yclamp) {
-							vel.y = 0.0;
-						}
-						if (zclamp) {
-							vel.z = 0.0;
-						}
-						vels[dz][dy][dx] = vel;
+					vec3d vel = grid.grid()(cx, cy, cz).velocities_posface;
+					if (xclamp) {
+						vel.x = 0.0;
 					}
+					if (yclamp) {
+						vel.y = 0.0;
+					}
+					if (zclamp) {
+						vel.z = 0.0;
+					}
+					vels[dz][dy][dx] = vel;
 				}
 			}
-			std::size_t dx = 1, dy = 1, dz = 1;
-			vec3d tmid = t - vec3d(0.5, 0.5, 0.5);
-			if (tmid.x < 0.0) {
-				dx = 0;
-				tmid.x += 1.0;
-			}
-			if (tmid.y < 0.0) {
-				dy = 0;
-				tmid.y += 1.0;
-			}
-			if (tmid.z < 0.0) {
-				dz = 0;
-				tmid.z += 1.0;
-			}
-			// v000(vels[dz    ][dy    ][0].x, vels[dz    ][0][dx    ].y, vels[0][dy    ][dx    ].z)
-			// v001(vels[dz    ][dy    ][1].x, vels[dz    ][0][dx + 1].y, vels[0][dy    ][dx + 1].z)
-			// v010(vels[dz    ][dy + 1][0].x, vels[dz    ][1][dx    ].y, vels[0][dy + 1][dx    ].z)
-			// v011(vels[dz    ][dy + 1][1].x, vels[dz    ][1][dx + 1].y, vels[0][dy + 1][dx + 1].z)
-			// v100(vels[dz + 1][dy    ][0].x, vels[dz + 1][0][dx    ].y, vels[1][dy    ][dx    ].z)
-			// v101(vels[dz + 1][dy    ][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy    ][dx + 1].z)
-			// v110(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx    ].y, vels[1][dy + 1][dx    ].z)
-			// v111(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z)
+		}
+		std::size_t dx = 1, dy = 1, dz = 1;
+		vec3d tmid = offset - vec3d(0.5, 0.5, 0.5);
+		if (tmid.x < 0.0) {
+			dx = 0;
+			tmid.x += 1.0;
+		}
+		if (tmid.y < 0.0) {
+			dy = 0;
+			tmid.y += 1.0;
+		}
+		if (tmid.z < 0.0) {
+			dz = 0;
+			tmid.z += 1.0;
+		}
+		_velocity_sample result;
+		// v000(vels[dz    ][dy    ][0].x, vels[dz    ][0][dx    ].y, vels[0][dy    ][dx    ].z)
+		// v001(vels[dz    ][dy    ][1].x, vels[dz    ][0][dx + 1].y, vels[0][dy    ][dx + 1].z)
+		// v010(vels[dz    ][dy + 1][0].x, vels[dz    ][1][dx    ].y, vels[0][dy + 1][dx    ].z)
+		// v011(vels[dz    ][dy + 1][1].x, vels[dz    ][1][dx + 1].y, vels[0][dy + 1][dx + 1].z)
+		// v100(vels[dz + 1][dy    ][0].x, vels[dz + 1][0][dx    ].y, vels[1][dy    ][dx    ].z)
+		// v101(vels[dz + 1][dy    ][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy    ][dx + 1].z)
+		// v110(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx    ].y, vels[1][dy + 1][dx    ].z)
+		// v111(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z)
+		result.v000 = vec3d(vels[dz][dy][0].x, vels[dz][0][dx].y, vels[0][dy][dx].z);
+		result.v001 = vec3d(vels[dz][dy][1].x, vels[dz][0][dx + 1].y, vels[0][dy][dx + 1].z);
+		result.v010 = vec3d(vels[dz][dy + 1][0].x, vels[dz][1][dx].y, vels[0][dy + 1][dx].z);
+		result.v011 = vec3d(vels[dz][dy + 1][1].x, vels[dz][1][dx + 1].y, vels[0][dy + 1][dx + 1].z);
+		result.v100 = vec3d(vels[dz + 1][dy][0].x, vels[dz + 1][0][dx].y, vels[1][dy][dx].z);
+		result.v101 = vec3d(vels[dz + 1][dy][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy][dx + 1].z);
+		result.v110 = vec3d(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx].y, vels[1][dy + 1][dx].z);
+		result.v111 = vec3d(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z);
+		return { result, tmid };
+	}
+
+	void simulation::_transfer_from_grid_pic() {
+		for (particle &p : _particles) {
+			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
+			auto [v, tmid] = _get_face_samples(grid(), p.grid_index, t);
+			p.velocity.x = trilerp(
+				v.v000.x, v.v001.x, v.v010.x, v.v011.x, v.v100.x, v.v101.x, v.v110.x, v.v111.x, tmid.z, tmid.y, t.x
+			);
+			p.velocity.y = trilerp(
+				v.v000.y, v.v001.y, v.v010.y, v.v011.y, v.v100.y, v.v101.y, v.v110.y, v.v111.y, tmid.z, t.y, tmid.x
+			);
+			p.velocity.z = trilerp(
+				v.v000.z, v.v001.z, v.v010.z, v.v011.z, v.v100.z, v.v101.z, v.v110.z, v.v111.z, t.z, tmid.y, tmid.x
+			);
+		}
+	}
+
+	void simulation::_transfer_from_grid_flip(double blend) {
+		for (particle &p : _particles) {
+			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
+			auto [v_old, tmid] = _get_face_samples(_old_grid, p.grid_index, t);
+			auto [v_new, tmid_other] = _get_face_samples(grid(), p.grid_index, t);
 			vec3d
-				v000(vels[dz][dy][0].x, vels[dz][0][dx].y, vels[0][dy][dx].z),
-				v001(vels[dz][dy][1].x, vels[dz][0][dx + 1].y, vels[0][dy][dx + 1].z),
-				v010(vels[dz][dy + 1][0].x, vels[dz][1][dx].y, vels[0][dy + 1][dx].z),
-				v011(vels[dz][dy + 1][1].x, vels[dz][1][dx + 1].y, vels[0][dy + 1][dx + 1].z),
-				v100(vels[dz + 1][dy][0].x, vels[dz + 1][0][dx].y, vels[1][dy][dx].z),
-				v101(vels[dz + 1][dy][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy][dx + 1].z),
-				v110(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx].y, vels[1][dy + 1][dx].z),
-				v111(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z);
-			p.velocity.x =
-				trilerp(v000.x, v001.x, v010.x, v011.x, v100.x, v101.x, v110.x, v111.x, tmid.z, tmid.y, t.x);
-			p.velocity.y =
-				trilerp(v000.y, v001.y, v010.y, v011.y, v100.y, v101.y, v110.y, v111.y, tmid.z, t.y, tmid.x);
-			p.velocity.z =
-				trilerp(v000.z, v001.z, v010.z, v011.z, v100.z, v101.z, v110.z, v111.z, t.z, tmid.y, tmid.x);
+				old_velocity(
+					trilerp(
+						v_old.v000.x, v_old.v001.x, v_old.v010.x, v_old.v011.x,
+						v_old.v100.x, v_old.v101.x, v_old.v110.x, v_old.v111.x,
+						tmid.z, tmid.y, t.x
+						),
+					trilerp(
+						v_old.v000.y, v_old.v001.y, v_old.v010.y, v_old.v011.y,
+						v_old.v100.y, v_old.v101.y, v_old.v110.y, v_old.v111.y,
+						tmid.z, t.y, tmid.x
+						),
+					trilerp(
+						v_old.v000.z, v_old.v001.z, v_old.v010.z, v_old.v011.z,
+						v_old.v100.z, v_old.v101.z, v_old.v110.z, v_old.v111.z,
+						t.z, tmid.y, tmid.x
+						)
+				),
+				new_velocity(
+					trilerp(
+						v_new.v000.x, v_new.v001.x, v_new.v010.x, v_new.v011.x,
+						v_new.v100.x, v_new.v101.x, v_new.v110.x, v_new.v111.x,
+						tmid.z, tmid.y, t.x
+						),
+					trilerp(
+						v_new.v000.y, v_new.v001.y, v_new.v010.y, v_new.v011.y,
+						v_new.v100.y, v_new.v101.y, v_new.v110.y, v_new.v111.y,
+						tmid.z, t.y, tmid.x
+						),
+					trilerp(
+						v_new.v000.z, v_new.v001.z, v_new.v010.z, v_new.v011.z,
+						v_new.v100.z, v_new.v101.z, v_new.v110.z, v_new.v111.z,
+						t.z, tmid.y, tmid.x
+						)
+				);
+			p.velocity = new_velocity + (p.velocity - old_velocity) * blend;
+		}
+	}
+
+	vec3d simulation::_calculate_c_vector(
+		double v000, double v001, double v010, double v011,
+		double v100, double v101, double v110, double v111,
+		double tx, double ty, double tz
+	) const {
+		return
+			_grad_kernel(vec3d(tx, ty, tz)) * v000 +
+			_grad_kernel(vec3d(tx - 1.0, ty, tz)) * v001 +
+			_grad_kernel(vec3d(tx, ty - 1.0, tz)) * v010 +
+			_grad_kernel(vec3d(tx - 1.0, ty - 1.0, tz)) * v011 +
+			_grad_kernel(vec3d(tx, ty, tz - 1.0)) * v100 +
+			_grad_kernel(vec3d(tx - 1.0, ty, tz - 1.0)) * v101 +
+			_grad_kernel(vec3d(tx, ty - 1.0, tz - 1.0)) * v110 +
+			_grad_kernel(vec3d(tx - 1.0, ty - 1.0, tz - 1.0)) * v111;
+	}
+
+	void simulation::_transfer_from_grid_apic() {
+		for (particle &p : _particles) {
+			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
+			auto [v, tmid] = _get_face_samples(grid(), p.grid_index, t);
+			p.velocity.x = trilerp(
+				v.v000.x, v.v001.x, v.v010.x, v.v011.x, v.v100.x, v.v101.x, v.v110.x, v.v111.x, tmid.z, tmid.y, t.x
+			);
+			p.velocity.y = trilerp(
+				v.v000.y, v.v001.y, v.v010.y, v.v011.y, v.v100.y, v.v101.y, v.v110.y, v.v111.y, tmid.z, t.y, tmid.x
+			);
+			p.velocity.z = trilerp(
+				v.v000.z, v.v001.z, v.v010.z, v.v011.z, v.v100.z, v.v101.z, v.v110.z, v.v111.z, t.z, tmid.y, tmid.x
+			);
 			p.cx = _calculate_c_vector(
-				v000.x, v001.x, v010.x, v011.x, v100.x, v101.x, v110.x, v111.x, vec3d(t.x, tmid.y, tmid.z)
-				);
+				v.v000.x, v.v001.x, v.v010.x, v.v011.x, v.v100.x, v.v101.x, v.v110.x, v.v111.x, t.x, tmid.y, tmid.z
+			);
 			p.cy = _calculate_c_vector(
-				v000.y, v001.y, v010.y, v011.y, v100.y, v101.y, v110.y, v111.y, vec3d(tmid.x, t.y, tmid.z)
-				);
+				v.v000.y, v.v001.y, v.v010.y, v.v011.y, v.v100.y, v.v101.y, v.v110.y, v.v111.y, tmid.x, t.y, tmid.z
+			);
 			p.cz = _calculate_c_vector(
-				v000.z, v001.z, v010.z, v011.z, v100.z, v101.z, v110.z, v111.z, vec3d(tmid.x, tmid.y, t.z)
-				);
+				v.v000.z, v.v001.z, v.v010.z, v.v011.z, v.v100.z, v.v101.z, v.v110.z, v.v111.z, tmid.x, tmid.y, t.z
+			);
 		}
 	}
 
