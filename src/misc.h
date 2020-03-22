@@ -14,7 +14,7 @@
 
 namespace fluid {
 	/// Linear interpolation.
-	template <typename T> [[nodsicard]] FLUID_FORCEINLINE T lerp(const T &a, const T &b, double t) {
+	template <typename T> [[nodiscard]] FLUID_FORCEINLINE T lerp(const T &a, const T &b, double t) {
 		return a * (1.0 - t) + b * t;
 	}
 	/// Bilinear interpolation.

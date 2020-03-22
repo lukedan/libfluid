@@ -19,17 +19,23 @@ target_sources(fluid
 		src/pressure_solver.cpp
 		src/simulation.cpp)
 
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+	target_link_libraries(fluid
+		PUBLIC OpenMP::OpenMP_CXX)
+endif()
+
 
 if(FLUID_BUILD_TESTBED)
 	add_executable(testbed)
 
-	find_package(OpenGL REQUIRED)
-	find_package(glfw3 CONFIG REQUIRED)
-
 	target_compile_features(testbed
 		PRIVATE cxx_std_17)
-	target_link_libraries(testbed
-		PRIVATE fluid glfw OpenGL::GLU OpenGL::GL)
 	target_sources(testbed
 		PRIVATE src/main.cpp)
+
+	find_package(OpenGL REQUIRED)
+	find_package(glfw3 CONFIG REQUIRED)
+	target_link_libraries(testbed
+		PRIVATE fluid glfw OpenGL::GLU OpenGL::GL)
 endif()

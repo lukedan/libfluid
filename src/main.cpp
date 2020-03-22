@@ -96,17 +96,17 @@ void simulation_thread() {
 
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
-			/*sim.seed_sphere(vec3d(25, 40, 25), 5);
-			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));*/
+			sim.seed_sphere(vec3d(25, 40, 25), 5);
+			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));
 
-			std::size_t x = 0;
+			/*std::size_t x = 0;
 			for (std::size_t y = 35; y < 45; ++y) {
 				for (std::size_t z = 20; z < 30; ++z) {
 					fluid::fluid_grid::cell &cell = sim.grid().grid()(x, y, z);
 					cell.cell_type = fluid::fluid_grid::cell::type::solid;
 					cell.velocities_posface = vec3d(100.0, 0.0, 0.0);
 				}
-			}
+			}*/
 
 			sim.reset_space_hash();
 
@@ -115,13 +115,13 @@ void simulation_thread() {
 		}
 
 		if (!sim_paused) {
-			for (std::size_t x = 1; x < 5; ++x) {
+			/*for (std::size_t x = 1; x < 5; ++x) {
 				for (std::size_t y = 35; y < 45; ++y) {
 					for (std::size_t z = 20; z < 30; ++z) {
 						sim.seed_cell(vec3s(x, y, z), vec3d(100.0, 0.0, 0.0));
 					}
 				}
-			}
+			}*/
 
 			sim.update(1.0 / 30.0);
 			update_simulation(sim);
@@ -306,7 +306,7 @@ int main() {
 
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
-		glTranslatef(0, 0, camera_distance);
+		glTranslated(0, 0, camera_distance);
 		glRotated(rotation.y, 1, 0, 0);
 		glRotated(rotation.x, 0, 1, 0);
 		glTranslatef(-25, -25, -25);

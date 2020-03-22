@@ -536,33 +536,38 @@ namespace fluid {
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);
 		double min_dist = 0.1 * re;
 		std::vector<vec3d> new_positions(_particles.size());
-#pragma omp parallel for
-		for (std::size_t i = substep; i < _particles.size(); i += step) {
-			const particle &p = _particles[i];
-			vec3d spring;
-			_space_hash.for_all_nearby_objects(
-				p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
-				[&](const particle &other) {
-					if (&other != &p) {
-						vec3d offset = p.position - other.position;
-						double sqr_dist = offset.squared_length();
-						if (sqr_dist < min_dist * min_dist) {
-							// the two particles are not too far away, so just add a random force to avoid
-							// floating point errors
-							// apic2d multiplies this value by 0.01 * dt here
-							spring += re * vec3d(dist(random), dist(random), dist(random));
-						} else {
-							double kernel_lower = 1.0 - sqr_dist / (cell_size * cell_size);
-							double kernel = 0.0;
-							if (kernel_lower > 0.0) {
-								kernel = kernel_lower * kernel_lower * kernel_lower;
+		int istep(step), isubstep(substep), isize(_particles.size());
+#pragma omp parallel
+		{
+			pcg32 thread_rand(std::random_device{}());
+#pragma omp for
+			for (int i = isubstep; i < isize; i += istep) {
+				const particle &p = _particles[i];
+				vec3d spring;
+				_space_hash.for_all_nearby_objects(
+					p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
+					[&](const particle &other) {
+						if (&other != &p) {
+							vec3d offset = p.position - other.position;
+							double sqr_dist = offset.squared_length();
+							if (sqr_dist < min_dist * min_dist) {
+								// the two particles are not too far away, so just add a random force to avoid
+								// floating point errors
+								// apic2d multiplies this value by 0.01 * dt here
+								spring += re * vec3d(dist(thread_rand), dist(thread_rand), dist(thread_rand));
+							} else {
+								double kernel_lower = 1.0 - sqr_dist / (cell_size * cell_size);
+								double kernel = 0.0;
+								if (kernel_lower > 0.0) {
+									kernel = kernel_lower * kernel_lower * kernel_lower;
+								}
+								spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
 							}
-							spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
 						}
 					}
-				}
-			);
-			new_positions[i] = p.position + spring * dt;
+				);
+				new_positions[i] = p.position + spring * dt;
+			}
 		}
 		for (std::size_t i = substep; i < _particles.size(); i += step) {
 			_particles[i].position = new_positions[i];
