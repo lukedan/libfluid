@@ -42,6 +42,13 @@ void update_simulation(const fluid::simulation &sim) {
 	// collect particles
 	std::vector<fluid::particle> new_particles(sim.particles().begin(), sim.particles().end());
 
+	double energy = 0.0;
+	for (fluid::particle &p : new_particles) {
+		energy += 0.5 * p.velocity.squared_length();
+		energy += 981 * p.position.y;
+	}
+	std::cerr << "    total energy: " << energy << "\n";
+
 	// collect occupation
 	fluid::grid3<std::size_t> grid(sim.grid().grid().get_size(), 0);
 	for (const auto &particle : sim.particles()) {
@@ -83,36 +90,38 @@ void simulation_thread() {
 		if (sim_reset) {
 			sim.particles().clear();
 
-			/*sim.seed_box(vec3d(20, 20, 20), vec3d(1, 1, 1));*/
-			sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));
+			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
 			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
+
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
 			/*sim.seed_sphere(vec3d(25, 40, 25), 5);
 			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));*/
 
-			/*std::size_t x = 0;
+			std::size_t x = 0;
 			for (std::size_t y = 35; y < 45; ++y) {
 				for (std::size_t z = 20; z < 30; ++z) {
 					fluid::fluid_grid::cell &cell = sim.grid().grid()(x, y, z);
 					cell.cell_type = fluid::fluid_grid::cell::type::solid;
 					cell.velocities_posface = vec3d(100.0, 0.0, 0.0);
 				}
-			}*/
+			}
+
+			sim.reset_space_hash();
 
 			update_simulation(sim);
 			sim_reset = false;
 		}
 
 		if (!sim_paused) {
-			/*for (std::size_t x = 1; x < 5; ++x) {
+			for (std::size_t x = 1; x < 5; ++x) {
 				for (std::size_t y = 35; y < 45; ++y) {
 					for (std::size_t z = 20; z < 30; ++z) {
 						sim.seed_cell(vec3s(x, y, z), vec3d(100.0, 0.0, 0.0));
 					}
 				}
-			}*/
+			}
 
 			sim.update(1.0 / 30.0);
 			update_simulation(sim);
@@ -169,14 +178,23 @@ void mesher_thread() {
 }
 
 
+enum class particle_debug_mode : unsigned char {
+	none,
+	velocity_direction,
+	velocity_magnitude,
+	maximum
+};
+
 bool
 rotating = false,
 draw_particles = true,
 draw_cells = false,
 draw_faces = false,
-draw_mesh = true;
-std::size_t particle_visualization = 1;
+draw_mesh = true,
+draw_apic_debug = false;
 vec2d mouse, rotation;
+particle_debug_mode debug_mode = particle_debug_mode::none;
+double camera_distance = -70.0;
 
 // callbacks
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -203,6 +221,16 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			break;
 		case GLFW_KEY_M:
 			draw_mesh = !draw_mesh;
+			break;
+		case GLFW_KEY_A:
+			draw_apic_debug = !draw_apic_debug;
+			break;
+			
+		case GLFW_KEY_T:
+			debug_mode = static_cast<particle_debug_mode>(static_cast<unsigned char>(debug_mode) + 1);
+			if (debug_mode == particle_debug_mode::maximum) {
+				debug_mode = particle_debug_mode::none;
+			}
 			break;
 
 		case GLFW_KEY_S:
@@ -238,6 +266,10 @@ void resize_callback(GLFWwindow *window, int width, int height) {
 	gluPerspective(60.0, width / static_cast<double>(height), 0.1, 1000.0);
 }
 
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+	camera_distance += yoffset;
+}
+
 
 int main() {
 	if (!glfwInit()) {
@@ -253,6 +285,7 @@ int main() {
 	glfwSetMouseButtonCallback(window, mouse_button_callback);
 	glfwSetCursorPosCallback(window, cursor_position_callback);
 	glfwSetWindowSizeCallback(window, resize_callback);
+	glfwSetScrollCallback(window, scroll_callback);
 
 	glfwMakeContextCurrent(window);
 
@@ -273,7 +306,7 @@ int main() {
 
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
-		glTranslatef(0, 0, -75);
+		glTranslatef(0, 0, camera_distance);
 		glRotated(rotation.y, 1, 0, 0);
 		glRotated(rotation.x, 0, 1, 0);
 		glTranslatef(-25, -25, -25);
@@ -381,15 +414,27 @@ int main() {
 								face_half = face_outer - vec3d(half_cell, half_cell, half_cell),
 								vel = sim_grid_velocities(x, y, z) * 0.001;
 
-							glColor3d(1.0, 0.0, 0.0);
+							if (vel.x > 0.0) {
+								glColor4d(1.0, 0.0, 0.0, 0.3);
+							} else {
+								glColor4d(0.0, 1.0, 1.0, 0.3);
+							}
 							glVertex3d(face_outer.x, face_half.y, face_half.z);
 							glVertex3d(face_outer.x + vel.x, face_half.y, face_half.z);
 
-							glColor3d(0.0, 1.0, 0.0);
+							if (vel.y > 0.0) {
+								glColor4d(0.0, 1.0, 0.0, 0.3);
+							} else {
+								glColor4d(1.0, 0.0, 1.0, 0.3);
+							}
 							glVertex3d(face_half.x, face_outer.y, face_half.z);
 							glVertex3d(face_half.x, face_outer.y + vel.y, face_half.z);
 
-							glColor3d(0.0, 0.0, 1.0);
+							if (vel.z > 0.0) {
+								glColor4d(0.0, 0.0, 1.0, 0.3);
+							} else {
+								glColor4d(1.0, 1.0, 0.0, 0.3);
+							}
 							glVertex3d(face_half.x, face_half.y, face_outer.z);
 							glVertex3d(face_half.x, face_half.y, face_outer.z + vel.z);
 						}
@@ -403,7 +448,7 @@ int main() {
 			glBegin(GL_POINTS);
 			{
 				std::lock_guard<std::mutex> guard(sim_particles_lock);
-				
+
 				double max_vel = 0.0;
 				for (fluid::particle &p : sim_particles) {
 					max_vel = std::max(max_vel, p.velocity.squared_length());
@@ -412,8 +457,11 @@ int main() {
 
 				for (fluid::particle &p : sim_particles) {
 					vec3d pos = p.position;
-					switch (particle_visualization) {
-					case 0:
+					switch (debug_mode) {
+					case particle_debug_mode::none:
+						glColor4d(1.0, 1.0, 1.0, 0.3);
+						break;
+					case particle_debug_mode::velocity_direction:
 						{
 							vec3d vel = fluid::vec_ops::apply<vec3d>(
 								[](double v) {
@@ -422,23 +470,28 @@ int main() {
 										v = v < 0.0 ? -1.0 : 1.0;
 									}
 									return std::clamp(std::log(v) + 0.5, 0.0, 1.0);
-								}, vel
+								}, p.velocity
 							);
 							glColor4d(vel.x, vel.y, vel.z, 0.3);
 						}
 						break;
-					case 1:
+					case particle_debug_mode::velocity_magnitude:
 						{
 							double c = p.velocity.length() / max_vel;
 							glColor4d(1.0, 1.0, 1.0, c * 0.9 + 0.1);
 						}
+						break;
+					default:
+						glColor4d(1.0, 0.0, 0.0, 1.0);
 						break;
 					}
 					glVertex3d(pos.x, pos.y, pos.z);
 				}
 			}
 			glEnd();
+		}
 
+		if (draw_apic_debug) {
 			glBegin(GL_LINES);
 			{
 				std::lock_guard<std::mutex> guard(sim_particles_lock);

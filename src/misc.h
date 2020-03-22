@@ -14,8 +14,22 @@
 
 namespace fluid {
 	/// Linear interpolation.
-	template <typename T> FLUID_FORCEINLINE T lerp(const T &a, const T &b, double t) {
+	template <typename T> [[nodsicard]] FLUID_FORCEINLINE T lerp(const T &a, const T &b, double t) {
 		return a * (1.0 - t) + b * t;
+	}
+	/// Bilinear interpolation.
+	template <typename T> [[nodiscard]] FLUID_FORCEINLINE T bilerp(
+		const T &v00, const T &v01, const T &v10, const T &v11, double t1, double t2
+	) {
+		return lerp(lerp(v00, v01, t2), lerp(v10, v11, t2), t1);
+	}
+	/// Trilinear interpolation.
+	template <typename T> [[nodiscard]] FLUID_FORCEINLINE T trilerp(
+		const T &v000, const T &v001, const T &v010, const T &v011,
+		const T &v100, const T &v101, const T &v110, const T &v111,
+		double t1, double t2, double t3
+	) {
+		return lerp(bilerp(v000, v001, v010, v011, t2, t3), bilerp(v100, v101, v110, v111, t2, t3), t1);
 	}
 
 	/// A semaphore. Copied from

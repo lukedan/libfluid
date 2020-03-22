@@ -37,6 +37,8 @@ namespace fluid {
 		/// Takes a single timestep using the default CFL number.
 		void time_step();
 
+		/// Resets \ref _space_hash.
+		void reset_space_hash();
 		/// Updates \ref _space_hash and \ref particle::grid_index.
 		void hash_particles();
 
@@ -53,7 +55,7 @@ namespace fluid {
 			double small_cell_size = cell_size / density;
 			std::uniform_real_distribution<double> dist(0.0, small_cell_size);
 			vec3s end(vec_ops::apply<vec3s>(
-				static_cast<const std::size_t&(*)(const std::size_t&, const std::size_t&)>(std::min),
+				static_cast<const std::size_t & (*)(const std::size_t&, const std::size_t&)>(std::min),
 				start + size, grid().grid().get_size()
 				));
 			for (std::size_t z = start.z; z < end.z; ++z) {
@@ -133,12 +135,16 @@ namespace fluid {
 		/// Zeros the velocities at the boundaries of the grid.
 		static void _remove_boundary_velocities(fluid_grid&);
 
-		/// The kernel function used when transfering velocities to and from the grid.
+		/// The kernel function used when transfering velocities to and from the grid. It is assumed that the input
+		/// vector has already been divided by \ref cell_size.
 		[[nodiscard]] FLUID_FORCEINLINE double _kernel(vec3d) const;
+		/// Computes the gradient of the kernel function. It is assumed that the input vector has already been divided by
+		/// \ref cell_size and has no coordinate that lies out of [-cell_size, cell_size].
+		[[nodiscard]] FLUID_FORCEINLINE vec3d _grad_kernel(vec3d) const;
 
 		/// Advects particles.
 		void _advect_particles(double);
-		
+
 		/// Transfers velocities from particles to the grid using PIC.
 		void _transfer_to_grid_pic();
 		/// Transfers velocities from particles to the grid using FLIP.
@@ -154,6 +160,12 @@ namespace fluid {
 		///
 		/// \param blend The blend factor. 1.0 means fully FLIP.
 		void _transfer_from_grid_flip(double blend);
+		/// Calculates the c vector.
+		vec3d _calculate_c_vector(
+			double v000, double v001, double v010, double v011,
+			double v100, double v101, double v110, double v111,
+			vec3d offset
+		) const;
 		/// Transfers velocities from the grid back to particles using APIC.
 		void _transfer_from_grid_apic();
 		/// Transfers velocities from the grid back to particles using \ref simulation_method.
