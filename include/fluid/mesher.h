@@ -22,7 +22,7 @@ namespace fluid {
 		/// one more coordinate on each dimension.
 		void resize(vec3s);
 
-		/// Generates a mesh for the given set of particles.
+		/// Generates a mesh for the given set of particles. The generated mesh will have only positions and indices.
 		[[nodiscard]] mesh_t generate_mesh(const std::vector<vec3d>&, double r);
 
 		vec3d grid_offset; ///< The offset of the sampling grid in world space.
@@ -40,5 +40,9 @@ namespace fluid {
 		void _sample_surface_function(const std::vector<vec3d>&, double);
 		/// Generate the mesh using the marching cubes algorithm.
 		[[nodiscard]] mesh_t _marching_cubes() const;
+		/// Adds a point to the vector, returning its index.
+		[[nodiscard]] std::size_t _add_point(
+			std::vector<vec3d> &v, vec3s cell, double *surf_func, std::size_t edge_table_index
+		) const;
 	};
 }

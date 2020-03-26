@@ -121,19 +121,6 @@ namespace fluid {
 			blending_factor = 1.0; ///< The factor used when blending different method together.
 		method simulation_method = method::apic; ///< The simulation method.
 	private:
-		/// Stores velocity samples near a particle.
-		struct _velocity_sample {
-			vec3d
-				v000, ///< Velocity at (0, 0, 0).
-				v001, ///< Velocity at (1, 0, 0).
-				v010, ///< Velocity at (0, 1, 0).
-				v011, ///< Velocity at (1, 1, 0).
-				v100, ///< Velocity at (0, 0, 1).
-				v101, ///< Velocity at (1, 0, 1).
-				v110, ///< Velocity at (0, 1, 1).
-				v111; ///< Velocity at (1, 1, 1).
-		};
-
 		std::deque<particle> _particles; ///< All particles.
 		fluid_grid
 			_grid, ///< The grid.
@@ -166,11 +153,6 @@ namespace fluid {
 		void _transfer_to_grid_apic();
 		/// Transfers velocities from particles to the grid using \ref simulation_method.
 		void _transfer_to_grid();
-
-		/// Returns the velocities around the given position.
-		std::pair<_velocity_sample, vec3d> _get_face_samples(
-			const fluid_grid &grid, vec3s grid_index, vec3d offset
-		) const;
 
 		/// Transfers velocities from the grid back to particles using PIC.
 		void _transfer_from_grid_pic();

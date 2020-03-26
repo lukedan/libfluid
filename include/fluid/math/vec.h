@@ -45,7 +45,9 @@ namespace fluid {
 
 		namespace _details {
 			/// Wrapper around \ref apply_to_impl().
-			template <std::size_t ...Is, typename Res, typename Func, typename ...Vecs> inline void apply_to(
+			template <
+				std::size_t ...Is, typename Res, typename Func, typename ...Vecs
+			> FLUID_FORCEINLINE void apply_to(
 				std::index_sequence<Is...>, Res &out, const Func &func, const Vecs &...vecs
 			) {
 				apply_to_impl<Is...>(out, func, vecs...);
@@ -53,14 +55,14 @@ namespace fluid {
 			/// Implementation of \ref apply_to().
 			template <
 				std::size_t I, std::size_t ...Is, typename Res, typename Func, typename ...Vecs
-			> inline void apply_to_impl(Res &out, const Func &func, const Vecs &...vecs) {
+			> FLUID_FORCEINLINE void apply_to_impl(Res &out, const Func &func, const Vecs &...vecs) {
 				out[I] = func(vecs[I]...);
 				apply_to_impl<Is...>(out, func, vecs...);
 			}
 			/// End of recursion.
 			template <
 				typename Res, typename Func, typename ...Vecs
-			> inline void apply_to_impl(Res&, const Func&, const Vecs&...) {
+			> FLUID_FORCEINLINE void apply_to_impl(Res&, const Func&, const Vecs&...) {
 			}
 		}
 		/// Applies the given function to all elements of the input vectors, with manual loop unrolling. This
@@ -85,7 +87,7 @@ namespace fluid {
 
 
 		/// Dot product.
-		template <typename Vec> FLUID_FORCEINLINE [[nodiscard]] typename Vec::value_type dot(
+		template <typename Vec> [[nodiscard]] FLUID_FORCEINLINE typename Vec::value_type dot(
 			const Vec &lhs, const Vec &rhs
 		) {
 			typename Vec::value_type result{};
@@ -424,6 +426,7 @@ namespace fluid {
 	using vec2f = vec2<float>; ///< Shorthand for \p vec2<float>.
 	using vec2d = vec2<double>; ///< Shorthand for \p vec2<double>.
 	using vec2i = vec2<int>; ///< Shorthand for \p vec2<int>.
+	using vec2s = vec2<std::size_t>; ///< Shorthand for \p vec2<std::size_t>.
 
 
 	/// 3D vectors.

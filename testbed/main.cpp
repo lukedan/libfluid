@@ -8,20 +8,19 @@
 #	define NOMINMAX
 #	include <Windows.h>
 #endif
-#include <GL\GL.h>
-#include <GL\GLU.h>
-#include <GLFW\glfw3.h>
+#include <GL/GL.h>
+#include <GL/GLU.h>
+#include <GLFW/glfw3.h>
 
-#include "simulation.h"
-#include "data_structures/grid.h"
-#include "mesher.h"
+#include <fluid/simulation.h>
+#include <fluid/data_structures/grid.h>
+#include <fluid/mesher.h>
+#include <fluid/data_structures/point_cloud.h>
 
 using fluid::vec2d;
 using fluid::vec3d;
 using fluid::vec3s;
 
-
-using glmesh = fluid::mesh<GLfloat, GLubyte, GLfloat, GLuint>;
 
 std::atomic_bool
 sim_paused = true,
@@ -91,13 +90,13 @@ void simulation_thread() {
 			sim.particles().clear();
 
 			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
-			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
+			sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
 
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
-			sim.seed_sphere(vec3d(25, 40, 25), 5);
-			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));
+			/*sim.seed_sphere(vec3d(25, 40, 25), 5);
+			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));*/
 
 			/*std::size_t x = 0;
 			for (std::size_t y = 35; y < 45; ++y) {
@@ -135,7 +134,7 @@ void simulation_thread() {
 
 
 std::mutex sim_mesh_lock;
-glmesh sim_mesh;
+fluid::mesher::mesh_t sim_mesh;
 
 void mesher_thread() {
 	while (true) {
@@ -153,35 +152,34 @@ void mesher_thread() {
 		}
 
 		fluid::mesher mesher;
-		mesher.grid_offset = vec3d(-1.0, -1.0, -1.0);
-		mesher.cell_size = 0.5;
 		mesher.particle_extent = 2.0; // TODO what effects does this have?
 		mesher.cell_radius = 3;
-		mesher.resize(vec3s(104, 104, 104));
+		/*mesher.grid_offset = vec3d(-1.0, -1.0, -1.0);
+		mesher.cell_size = 0.5;
+		mesher.resize(vec3s(104, 104, 104));*/
+		mesher.grid_offset = vec3d();
+		mesher.cell_size = 0.5;
+		mesher.resize(vec3s(100, 100, 100));
 		fluid::mesher::mesh_t mesh = mesher.generate_mesh(particles, 0.5);
-		glmesh resmesh;
-		for (vec3d v : mesh.positions) {
-			resmesh.positions.emplace_back(v);
-		}
-		for (std::size_t i : mesh.indices) {
-			resmesh.indices.emplace_back(static_cast<GLuint>(i));
-		}
-		for (vec3d n : mesh.normals) {
-			resmesh.normals.emplace_back(n);
-		}
+		mesh.generate_normals();
 
 		{
 			std::lock_guard<std::mutex> lock(sim_mesh_lock);
-			sim_mesh = std::move(resmesh);
+			sim_mesh = std::move(mesh);
 		}
 	}
 }
 
 
-enum class particle_debug_mode : unsigned char {
+enum class particle_visualize_mode : unsigned char {
 	none,
 	velocity_direction,
 	velocity_magnitude,
+	maximum
+};
+enum class mesh_visualize_mode : unsigned char {
+	none,
+	transparent,
 	maximum
 };
 
@@ -193,7 +191,8 @@ draw_faces = false,
 draw_mesh = true,
 draw_apic_debug = false;
 vec2d mouse, rotation;
-particle_debug_mode debug_mode = particle_debug_mode::none;
+particle_visualize_mode particle_vis = particle_visualize_mode::none;
+mesh_visualize_mode mesh_vis = mesh_visualize_mode::none;
 double camera_distance = -70.0;
 
 // callbacks
@@ -226,10 +225,16 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			draw_apic_debug = !draw_apic_debug;
 			break;
 			
-		case GLFW_KEY_T:
-			debug_mode = static_cast<particle_debug_mode>(static_cast<unsigned char>(debug_mode) + 1);
-			if (debug_mode == particle_debug_mode::maximum) {
-				debug_mode = particle_debug_mode::none;
+		case GLFW_KEY_F1:
+			particle_vis = static_cast<particle_visualize_mode>(static_cast<unsigned char>(particle_vis) + 1);
+			if (particle_vis == particle_visualize_mode::maximum) {
+				particle_vis = particle_visualize_mode::none;
+			}
+			break;
+		case GLFW_KEY_F2:
+			mesh_vis = static_cast<mesh_visualize_mode>(static_cast<unsigned char>(mesh_vis) + 1);
+			if (mesh_vis == mesh_visualize_mode::maximum) {
+				mesh_vis = mesh_visualize_mode::none;
 			}
 			break;
 
@@ -238,6 +243,19 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 				std::lock_guard<std::mutex> guard(sim_mesh_lock);
 				std::ofstream fout("mesh.obj");
 				sim_mesh.save_obj(fout);
+			}
+			break;
+		case GLFW_KEY_D:
+			{
+				std::vector<vec3d> points;
+				{
+					std::lock_guard<std::mutex> guard(sim_particles_lock);
+					for (const fluid::particle &p : sim_particles) {
+						points.emplace_back(p.position);
+					}
+				}
+				std::ofstream fout("points.txt");
+				fluid::point_cloud::save_to_naive(fout, points.begin(), points.end());
 			}
 			break;
 		}
@@ -368,14 +386,16 @@ int main() {
 			glEnable(GL_LIGHTING);
 
 			glEnable(GL_LIGHT0);
-			GLfloat color1[]{ 1, 1, 1, 1 };
+			GLfloat color1[]{ 0.6, 0.6, 0.6, 1 };
 			glLightfv(GL_LIGHT0, GL_DIFFUSE, color1);
+			glLightfv(GL_LIGHT0, GL_SPECULAR, color1);
 			GLfloat dir1[]{ -1, -1, -1, 0 };
 			glLightfv(GL_LIGHT0, GL_POSITION, dir1);
 
 			glEnable(GL_LIGHT1);
-			GLfloat color2[]{ 1, 1, 1, 1 };
+			GLfloat color2[]{ 0.6, 0.6, 0.6, 1 };
 			glLightfv(GL_LIGHT1, GL_DIFFUSE, color2);
+			glLightfv(GL_LIGHT1, GL_SPECULAR, color2);
 			GLfloat dir2[]{ 1, -1, 1, 0 };
 			glLightfv(GL_LIGHT1, GL_POSITION, dir2);
 
@@ -383,14 +403,21 @@ int main() {
 			glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT | GL_DIFFUSE);
 
 			glBegin(GL_TRIANGLES);
-			glColor4d(0.5, 0.5, 1.0, 0.2);
+			switch (mesh_vis) {
+			case mesh_visualize_mode::none:
+				glColor4d(1.0, 1.0, 1.0, 1.0);
+				break;
+			case mesh_visualize_mode::transparent:
+				glColor4d(0.5, 0.5, 1.0, 0.2);
+				break;
+			}
 			{
 				std::lock_guard<std::mutex> guard(sim_mesh_lock);
 				for (std::size_t i = 0; i < sim_mesh.indices.size(); ++i) {
-					fluid::vec3<GLfloat> v = sim_mesh.positions[i];
-					fluid::vec3<GLfloat> n = sim_mesh.normals[i];
-					glNormal3f(n.x, n.y, n.z);
-					glVertex3f(v.x, v.y, v.z);
+					vec3d v = sim_mesh.positions[sim_mesh.indices[i]];
+					vec3d n = sim_mesh.normals[sim_mesh.indices[i]];
+					glNormal3d(n.x, n.y, n.z);
+					glVertex3d(v.x, v.y, v.z);
 				}
 			}
 			glEnd();
@@ -457,11 +484,11 @@ int main() {
 
 				for (fluid::particle &p : sim_particles) {
 					vec3d pos = p.position;
-					switch (debug_mode) {
-					case particle_debug_mode::none:
+					switch (particle_vis) {
+					case particle_visualize_mode::none:
 						glColor4d(1.0, 1.0, 1.0, 0.3);
 						break;
-					case particle_debug_mode::velocity_direction:
+					case particle_visualize_mode::velocity_direction:
 						{
 							vec3d vel = fluid::vec_ops::apply<vec3d>(
 								[](double v) {
@@ -475,7 +502,7 @@ int main() {
 							glColor4d(vel.x, vel.y, vel.z, 0.3);
 						}
 						break;
-					case particle_debug_mode::velocity_magnitude:
+					case particle_visualize_mode::velocity_magnitude:
 						{
 							double c = p.velocity.length() / max_vel;
 							glColor4d(1.0, 1.0, 1.0, c * 0.9 + 0.1);

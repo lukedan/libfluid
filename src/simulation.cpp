@@ -185,7 +185,7 @@ namespace fluid {
 				},
 				grid_pos, grid().grid().get_size()
 					);
-			_space_hash.add_object_at(p.grid_index, p);
+			_space_hash.add_object_at_unchecked(p.grid_index, p);
 		}
 	}
 
@@ -341,84 +341,10 @@ namespace fluid {
 		}
 	}
 
-	/// Clamps the input value, returning both the result and whether the value has been modified. Note that this
-	/// function returns clamped for the max value, so that velocities at the max borders are ignored.
-	std::pair<std::size_t, bool> _clamp(std::size_t val, std::size_t min, std::size_t max) {
-		if (val < min) {
-			return { min, true };
-		}
-		if (val >= max) {
-			return { max, true };
-		}
-		return { val, false };
-	}
-	std::pair<simulation::_velocity_sample, vec3d> simulation::_get_face_samples(
-		const fluid_grid &grid, vec3s grid_index, vec3d offset
-	) const {
-		//         z  y  x
-		vec3d vels[3][3][3];
-		for (std::size_t dz = 0; dz < 3; ++dz) {
-			auto [cz, zclamp] = _clamp(grid_index.z + dz, 1, grid.grid().get_size().z);
-			--cz;
-			for (std::size_t dy = 0; dy < 3; ++dy) {
-				auto [cy, yclamp] = _clamp(grid_index.y + dy, 1, grid.grid().get_size().y);
-				--cy;
-				for (std::size_t dx = 0; dx < 3; ++dx) {
-					auto [cx, xclamp] = _clamp(grid_index.x + dx, 1, grid.grid().get_size().x);
-					--cx;
-
-					vec3d vel = grid.grid()(cx, cy, cz).velocities_posface;
-					if (xclamp) {
-						vel.x = 0.0;
-					}
-					if (yclamp) {
-						vel.y = 0.0;
-					}
-					if (zclamp) {
-						vel.z = 0.0;
-					}
-					vels[dz][dy][dx] = vel;
-				}
-			}
-		}
-		std::size_t dx = 1, dy = 1, dz = 1;
-		vec3d tmid = offset - vec3d(0.5, 0.5, 0.5);
-		if (tmid.x < 0.0) {
-			dx = 0;
-			tmid.x += 1.0;
-		}
-		if (tmid.y < 0.0) {
-			dy = 0;
-			tmid.y += 1.0;
-		}
-		if (tmid.z < 0.0) {
-			dz = 0;
-			tmid.z += 1.0;
-		}
-		_velocity_sample result;
-		// v000(vels[dz    ][dy    ][0].x, vels[dz    ][0][dx    ].y, vels[0][dy    ][dx    ].z)
-		// v001(vels[dz    ][dy    ][1].x, vels[dz    ][0][dx + 1].y, vels[0][dy    ][dx + 1].z)
-		// v010(vels[dz    ][dy + 1][0].x, vels[dz    ][1][dx    ].y, vels[0][dy + 1][dx    ].z)
-		// v011(vels[dz    ][dy + 1][1].x, vels[dz    ][1][dx + 1].y, vels[0][dy + 1][dx + 1].z)
-		// v100(vels[dz + 1][dy    ][0].x, vels[dz + 1][0][dx    ].y, vels[1][dy    ][dx    ].z)
-		// v101(vels[dz + 1][dy    ][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy    ][dx + 1].z)
-		// v110(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx    ].y, vels[1][dy + 1][dx    ].z)
-		// v111(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z)
-		result.v000 = vec3d(vels[dz][dy][0].x, vels[dz][0][dx].y, vels[0][dy][dx].z);
-		result.v001 = vec3d(vels[dz][dy][1].x, vels[dz][0][dx + 1].y, vels[0][dy][dx + 1].z);
-		result.v010 = vec3d(vels[dz][dy + 1][0].x, vels[dz][1][dx].y, vels[0][dy + 1][dx].z);
-		result.v011 = vec3d(vels[dz][dy + 1][1].x, vels[dz][1][dx + 1].y, vels[0][dy + 1][dx + 1].z);
-		result.v100 = vec3d(vels[dz + 1][dy][0].x, vels[dz + 1][0][dx].y, vels[1][dy][dx].z);
-		result.v101 = vec3d(vels[dz + 1][dy][1].x, vels[dz + 1][0][dx + 1].y, vels[1][dy][dx + 1].z);
-		result.v110 = vec3d(vels[dz + 1][dy + 1][0].x, vels[dz + 1][1][dx].y, vels[1][dy + 1][dx].z);
-		result.v111 = vec3d(vels[dz + 1][dy + 1][1].x, vels[dz + 1][1][dx + 1].y, vels[1][dy + 1][dx + 1].z);
-		return { result, tmid };
-	}
-
 	void simulation::_transfer_from_grid_pic() {
 		for (particle &p : _particles) {
 			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
-			auto [v, tmid] = _get_face_samples(grid(), p.grid_index, t);
+			auto [v, tmid] = grid().get_face_samples(p.grid_index, t);
 			p.velocity.x = trilerp(
 				v.v000.x, v.v001.x, v.v010.x, v.v011.x, v.v100.x, v.v101.x, v.v110.x, v.v111.x, tmid.z, tmid.y, t.x
 			);
@@ -434,8 +360,8 @@ namespace fluid {
 	void simulation::_transfer_from_grid_flip(double blend) {
 		for (particle &p : _particles) {
 			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
-			auto [v_old, tmid] = _get_face_samples(_old_grid, p.grid_index, t);
-			auto [v_new, tmid_other] = _get_face_samples(grid(), p.grid_index, t);
+			auto [v_old, tmid] = _old_grid.get_face_samples(p.grid_index, t);
+			auto [v_new, tmid_other] = grid().get_face_samples(p.grid_index, t);
 			vec3d
 				old_velocity(
 					trilerp(
@@ -494,7 +420,7 @@ namespace fluid {
 	void simulation::_transfer_from_grid_apic() {
 		for (particle &p : _particles) {
 			vec3d t = (p.position - grid_offset) / cell_size - vec3d(p.grid_index);
-			auto [v, tmid] = _get_face_samples(grid(), p.grid_index, t);
+			auto [v, tmid] = grid().get_face_samples(p.grid_index, t);
 			p.velocity.x = trilerp(
 				v.v000.x, v.v001.x, v.v010.x, v.v011.x, v.v100.x, v.v101.x, v.v110.x, v.v111.x, tmid.z, tmid.y, t.x
 			);
@@ -536,7 +462,10 @@ namespace fluid {
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);
 		double min_dist = 0.1 * re;
 		std::vector<vec3d> new_positions(_particles.size());
-		int istep(step), isubstep(substep), isize(_particles.size());
+		int
+			istep = static_cast<int>(step),
+			isubstep = static_cast<int>(substep),
+			isize = static_cast<int>(_particles.size());
 #pragma omp parallel
 		{
 			pcg32 thread_rand(std::random_device{}());

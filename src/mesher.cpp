@@ -4,63 +4,6 @@
 /// Implementation of the mesher.
 
 namespace fluid {
-	void mesher::resize(vec3s size) {
-		_surface_function = grid3<double>(size + vec3s(1, 1, 1));
-		_hash.resize(size);
-	}
-
-	mesher::mesh_t mesher::generate_mesh(const std::vector<vec3d> &particles, double r) {
-		_sample_surface_function(particles, r);
-		return _marching_cubes();
-	}
-
-	double mesher::_kernel(double sqr_dist) const {
-		sqr_dist = 1.0 - sqr_dist;
-		if (sqr_dist > 0.0) {
-			return sqr_dist * sqr_dist * sqr_dist;
-		}
-		return 0.0;
-	}
-
-	void mesher::_sample_surface_function(const std::vector<vec3d> &particles, double r) {
-		_hash.clear();
-		for (const vec3d &p : particles) {
-			vec3s index((p - grid_offset) / cell_size);
-			_hash.add_object_at(index, p);
-		}
-		vec3s
-			min_offset(cell_radius, cell_radius, cell_radius),
-			max_offset(cell_radius - 1, cell_radius - 1, cell_radius - 1);
-		for (std::size_t z = 0; z < _surface_function.get_size().z; ++z) {
-			for (std::size_t y = 0; y < _surface_function.get_size().y; ++y) {
-				for (std::size_t x = 0; x < _surface_function.get_size().x; ++x) {
-					double tot_weight = 0.0, tot_rad = 0.0;
-					vec3d tot_pos, grid_pos = grid_offset + cell_size * vec3d(vec3s(x, y, z));
-					bool has_particles = false;
-					_hash.for_all_nearby_objects(
-						vec3s(x, y, z), min_offset, max_offset,
-						[&](const vec3d &p) {
-							has_particles = true;
-							double w = _kernel(
-								(p - grid_pos).squared_length() / (particle_extent * particle_extent)
-							);
-							tot_weight += w;
-							tot_rad += w * r;
-							tot_pos += w * p;
-						}
-					);
-					double value = 1.0;
-					if (has_particles) {
-						tot_rad /= tot_weight;
-						tot_pos /= tot_weight;
-						value = (tot_pos - grid_pos).length() - tot_rad;
-					}
-					_surface_function(x, y, z) = value;
-				}
-			}
-		}
-	}
-
 	/// The edge table for the marching cubes algorithm, taken from http://paulbourke.net/geometry/polygonise/.
 	static const std::uint16_t _edge_table[256]{
 		0x000, 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
@@ -356,6 +299,7 @@ namespace fluid {
 	{ 0, 3, 8, _end },
 	{ _end }
 	};
+	/// The index offsets for each vertex.
 	static const vec3s _cell_vertex_offsets[8]{
 		{ 0, 0, 0 }, { 1, 0, 0 }, { 1, 1, 0 }, { 0, 1, 0 },
 	{ 0, 0, 1 }, { 1, 0, 1 }, { 1, 1, 1 }, { 0, 1, 1 },
@@ -366,10 +310,98 @@ namespace fluid {
 	{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
 	{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
 	};
+
+
+	void mesher::resize(vec3s size) {
+		_surface_function = grid3<double>(size + vec3s(1, 1, 1));
+		_hash.resize(size);
+	}
+
+	mesher::mesh_t mesher::generate_mesh(const std::vector<vec3d> &particles, double r) {
+		_sample_surface_function(particles, r);
+		return _marching_cubes();
+	}
+
+	double mesher::_kernel(double sqr_dist) const {
+		sqr_dist = 1.0 - sqr_dist;
+		if (sqr_dist > 0.0) {
+			return sqr_dist * sqr_dist * sqr_dist;
+		}
+		return 0.0;
+	}
+
+	void mesher::_sample_surface_function(const std::vector<vec3d> &particles, double r) {
+		_hash.clear();
+		for (const vec3d &p : particles) {
+			vec3i index((p - grid_offset) / cell_size);
+			if (index.x > 0 && index.y > 0 && index.z > 0) {
+				_hash.add_object_at(vec3s(index), p);
+			}
+		}
+		vec3s
+			min_offset(cell_radius, cell_radius, cell_radius),
+			max_offset(cell_radius - 1, cell_radius - 1, cell_radius - 1);
+		for (std::size_t z = 0; z < _surface_function.get_size().z; ++z) {
+			for (std::size_t y = 0; y < _surface_function.get_size().y; ++y) {
+				for (std::size_t x = 0; x < _surface_function.get_size().x; ++x) {
+					double tot_weight = 0.0, tot_rad = 0.0;
+					vec3d tot_pos, grid_pos = grid_offset + cell_size * vec3d(vec3s(x, y, z));
+					bool has_particles = false;
+					_hash.for_all_nearby_objects(
+						vec3s(x, y, z), min_offset, max_offset,
+						[&](const vec3d &p) {
+							has_particles = true;
+							double w = _kernel(
+							(p - grid_pos).squared_length() / (particle_extent * particle_extent)
+							);
+							tot_weight += w;
+							tot_rad += w * r;
+							tot_pos += w * p;
+						}
+					);
+					double value = 1.0;
+					if (has_particles) {
+						tot_rad /= tot_weight;
+						tot_pos /= tot_weight;
+						value = (tot_pos - grid_pos).length() - tot_rad;
+					}
+					_surface_function(x, y, z) = value;
+				}
+			}
+		}
+	}
+
+	std::size_t mesher::_add_point(
+		std::vector<vec3d> &v, vec3s cell, double *surf_func, std::size_t edge_table_index
+	) const {
+		std::size_t res = v.size();
+		const std::uint8_t *verts = _edge_vert_table[edge_table_index];
+		double v1 = surf_func[verts[0]], v2 = surf_func[verts[1]];
+		v.emplace_back(
+			grid_offset + cell_size * lerp(
+				vec3d(cell + _cell_vertex_offsets[verts[0]]),
+				vec3d(cell + _cell_vertex_offsets[verts[1]]),
+				v1 / (v1 - v2)
+				)
+		);
+		return res;
+	}
+
+	/// Stores indices to edge midpoints in a layer.
+	struct _edge_midpoints {
+		std::size_t
+			mid0, ///< The index of the midpoint of edge 0.
+			mid3; ///< The index of the midpoint of edge 3.
+	};
 	mesher::mesh_t mesher::_marching_cubes() const {
 		// http://paulbourke.net/geometry/polygonise/
-		mesh<double, std::uint8_t, double, std::size_t> result;
-		for (std::size_t z = 0; z + 1< _surface_function.get_size().z; ++z) {
+		mesh_t result;
+		vec2s layer_size_plus_one(_surface_function.get_size().x, _surface_function.get_size().y);
+		grid2<_edge_midpoints>
+			mid03_prev(layer_size_plus_one), // midpoints of edges 4-7 of the previouis layer
+			mid03_cur(layer_size_plus_one); // midpoints of edges 4-7 of the current layer
+		grid2<std::size_t> mid8(layer_size_plus_one); // midpoints of edge 8 of the current layer
+		for (std::size_t z = 0; z + 1 < _surface_function.get_size().z; ++z) {
 			for (std::size_t y = 0; y + 1 < _surface_function.get_size().y; ++y) {
 				for (std::size_t x = 0; x + 1 < _surface_function.get_size().x; ++x) {
 					double surf_func[8];
@@ -383,35 +415,97 @@ namespace fluid {
 					if (edge_list == 0) { // either entirely inside or outside of the mesh
 						continue;
 					}
-					vec3d mids[12];
-					for (std::size_t i = 0; i < 12; ++i) {
+					std::size_t ids[12]{};
+					{
+						_edge_midpoints
+							&mp00 = mid03_prev(x, y),
+							&mp01 = mid03_prev(x + 1, y),
+							&mp10 = mid03_prev(x, y + 1),
+							&mc00 = mid03_cur(x, y);
+						std::size_t
+							&m800 = mid8(x, y),
+							&m801 = mid8(x + 1, y),
+							&m810 = mid8(x, y + 1);
+
+						if (z == 0) {
+							if (y == 0) {
+								if ((edge_list & (1 << 0)) != 0) {
+									mp00.mid0 = _add_point(result.positions, vec3s(x, y, z), surf_func, 0);
+								}
+							}
+							if ((edge_list & (1 << 1)) != 0) {
+								mp01.mid3 = _add_point(result.positions, vec3s(x, y, z), surf_func, 1);
+							}
+							if ((edge_list & (1 << 2)) != 0) {
+								mp10.mid0 = _add_point(result.positions, vec3s(x, y, z), surf_func, 2);
+							}
+							if (x == 0) {
+								if ((edge_list & (1 << 3)) != 0) {
+									mp00.mid3 = _add_point(result.positions, vec3s(x, y, z), surf_func, 3);
+								}
+							}
+						}
+						ids[0] = mp00.mid0;
+						ids[1] = mp01.mid3;
+						ids[2] = mp10.mid0;
+						ids[3] = mp00.mid3;
+
+						if (y == 0) {
+							if ((edge_list & (1 << 4)) != 0) {
+								mc00.mid0 = _add_point(result.positions, vec3s(x, y, z), surf_func, 4);
+							}
+						}
+						ids[4] = mc00.mid0;
+
+						// 5 & 6 new
+
+						if (x == 0) {
+							if ((edge_list & (1 << 7)) != 0) {
+								mc00.mid3 = _add_point(result.positions, vec3s(x, y, z), surf_func, 7);
+							}
+						}
+						ids[7] = mc00.mid3;
+
+						if (x == 0 && y == 0) {
+							if ((edge_list & (1 << 8)) != 0) {
+								m800 = _add_point(result.positions, vec3s(x, y, z), surf_func, 8);
+							}
+						}
+						ids[8] = m800;
+
+						if (y == 0) {
+							if ((edge_list & (1 << 9)) != 0) {
+								m801 = _add_point(result.positions, vec3s(x, y, z), surf_func, 9);
+							}
+						}
+						ids[9] = m801;
+
+						// 10 new
+
+						if (x == 0) {
+							if ((edge_list & (1 << 11)) != 0) {
+								m810 = _add_point(result.positions, vec3s(x, y, z), surf_func, 11);
+							}
+						}
+						ids[11] = m810;
+					}
+					for (std::size_t i : { 5, 6, 10 }) {
 						if ((edge_list & (1 << i)) != 0) {
-							const std::uint8_t *verts = _edge_vert_table[i];
-							double val1 = surf_func[verts[0]], val2 = surf_func[verts[1]];
-							mids[i] = grid_offset + cell_size * lerp(
-								vec3d(vec3s(x, y, z) + _cell_vertex_offsets[verts[0]]),
-								vec3d(vec3s(x, y, z) + _cell_vertex_offsets[verts[1]]),
-								val1 / (val1 - val2)
-							);
+							ids[i] = _add_point(result.positions, vec3s(x, y, z), surf_func, i);
 						}
 					}
+					mid03_cur(x + 1, y).mid3 = ids[5];
+					mid03_cur(x, y + 1).mid0 = ids[6];
+					mid8(x + 1, y + 1) = ids[10];
 					const std::uint8_t *tri_list = _tri_table[occupation];
 					for (std::size_t i = 0; tri_list[i] != _end; i += 3) {
-						std::size_t first = result.positions.size();
-						vec3d normal = vec_ops::cross(mids[tri_list[i + 1]] - mids[tri_list[i]], mids[tri_list[i + 2]] - mids[tri_list[i]]);
-						normal = normal.normalized_checked().value_or(vec3d(1.0, 0.0, 0.0));
-						result.normals.emplace_back(normal);
-						result.normals.emplace_back(normal);
-						result.normals.emplace_back(normal);
-						result.positions.emplace_back(mids[tri_list[i]]);
-						result.positions.emplace_back(mids[tri_list[i + 1]]);
-						result.positions.emplace_back(mids[tri_list[i + 2]]);
-						result.indices.emplace_back(first);
-						result.indices.emplace_back(first + 1);
-						result.indices.emplace_back(first + 2);
+						result.indices.emplace_back(ids[tri_list[i]]);
+						result.indices.emplace_back(ids[tri_list[i + 1]]);
+						result.indices.emplace_back(ids[tri_list[i + 2]]);
 					}
 				}
 			}
+			std::swap(mid03_cur, mid03_prev);
 		}
 		return result;
 	}

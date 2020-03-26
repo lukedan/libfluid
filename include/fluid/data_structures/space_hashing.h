@@ -26,8 +26,18 @@ namespace fluid {
 		}
 
 		/// Adds an object to the grid. The object must not be moved in memory after it has been added until
-		/// \ref clear() has been called.
-		void add_object_at(vec3s index, T &obj) {
+		/// \ref clear() has been called. The object will not be added if it falls out of the grid.
+		///
+		/// \return Whether the object is in the grid and has been added.
+		bool add_object_at(vec3s index, T &obj) {
+			if (index.x < _table.get_size().x && index.y < _table.get_size().y && index.z < _table.get_size().z) {
+				add_object_at_unchecked(index, obj);
+				return true;
+			}
+			return false;
+		}
+		/// Adds an object to the grid without checking its coordinates. Use with caution.
+		void add_object_at_unchecked(vec3s index, T &obj) {
 			add_object_at_raw(_table.index_to_raw(index), obj);
 		}
 		/// \ref add_object_at() that takes a raw index.
