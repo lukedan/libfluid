@@ -44,9 +44,9 @@ void update_simulation(const fluid::simulation &sim) {
 	double energy = 0.0;
 	for (fluid::particle &p : new_particles) {
 		energy += 0.5 * p.velocity.squared_length();
-		energy += 981 * p.position.y;
+		energy -= fluid::vec_ops::dot(sim.gravity, p.position);
 	}
-	std::cerr << "    total energy: " << energy << "\n";
+	std::cout << "    total energy: " << energy << "\n";
 
 	// collect occupation
 	fluid::grid3<std::size_t> grid(sim.grid().grid().get_size(), 0);
@@ -84,6 +84,28 @@ void simulation_thread() {
 	sim.grid_offset = sim_grid_offset;
 	sim.cell_size = sim_cell_size;
 	sim.simulation_method = fluid::simulation::method::apic;
+	sim.gravity = vec3d(0.0, -981.0, 0.0);
+
+	sim.pre_time_step_callback = [](double dt) {
+		std::cout << "  time step " << dt << "\n";
+	};
+	sim.post_pressure_solve_callback = [](
+		double, std::vector<double> &pressure, double residual, std::size_t iters
+	) {
+		std::cout << "    iterations = " << iters << "\n";
+		std::cout << "    residual = " << residual << "\n";
+		auto max_it = std::max_element(pressure.begin(), pressure.end());
+		if (max_it != pressure.end()) {
+			std::cout << "    max pressure = " << *max_it << "\n";
+		}
+	};
+	sim.post_grid_to_particle_transfer_callback = [&sim](double) {
+		double maxv = 0.0;
+		for (const fluid::particle &p : sim.particles()) {
+			maxv = std::max(maxv, p.velocity.squared_length());
+		}
+		std::cout << "    max particle velocity = " << std::sqrt(maxv) << "\n";
+	};
 
 	while (true) {
 		if (sim_reset) {
@@ -92,7 +114,8 @@ void simulation_thread() {
 			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
 			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
-			sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);
+			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);*/
+			sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);
 
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
@@ -123,6 +146,7 @@ void simulation_thread() {
 				}
 			}*/
 
+			std::cout << "update\n";
 			sim.update(1.0 / 30.0);
 			update_simulation(sim);
 		} else if (sim_advance) {
@@ -222,7 +246,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 		case GLFW_KEY_A:
 			draw_apic_debug = !draw_apic_debug;
 			break;
-			
+
 		case GLFW_KEY_F1:
 			particle_vis = static_cast<particle_visualize_mode>(static_cast<unsigned char>(particle_vis) + 1);
 			if (particle_vis == particle_visualize_mode::maximum) {

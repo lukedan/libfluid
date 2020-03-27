@@ -341,7 +341,10 @@ namespace fluid {
 		vec3s
 			min_offset(cell_radius, cell_radius, cell_radius),
 			max_offset(cell_radius - 1, cell_radius - 1, cell_radius - 1);
-		for (std::size_t z = 0; z < _surface_function.get_size().z; ++z) {
+		int zmax = static_cast<int>(_surface_function.get_size().z);
+#pragma omp parallel for
+		for (int iz = 0; iz < zmax; ++iz) {
+			auto z = static_cast<std::size_t>(iz);
 			for (std::size_t y = 0; y < _surface_function.get_size().y; ++y) {
 				for (std::size_t x = 0; x < _surface_function.get_size().x; ++x) {
 					double tot_weight = 0.0, tot_rad = 0.0;

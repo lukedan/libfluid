@@ -35,7 +35,7 @@ namespace fluid {
 		space_hashing<const vec3d> _hash; ///< Space hashing.
 
 		/// The kernel function for weighing particles.
-		[[nodiscard]] double _kernel(double sqr_dist) const;
+		[[nodiscard]] FLUID_FORCEINLINE double _kernel(double sqr_dist) const;
 		/// Hashes the particles and samples the particles into the grid.
 		void _sample_surface_function(const std::vector<vec3d>&, double);
 		/// Generate the mesh using the marching cubes algorithm.

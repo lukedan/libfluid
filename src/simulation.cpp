@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <algorithm>
-#include <iostream>
 #include <random>
 
 #include "fluid/pressure_solver.h"
@@ -17,7 +16,6 @@ namespace fluid {
 	}
 
 	void simulation::update(double dt) {
-		std::cout << "update\n";
 		while (true) {
 			double ts = cfl_number * cfl();
 			if (ts > dt) {
@@ -30,42 +28,57 @@ namespace fluid {
 	}
 
 	void simulation::time_step(double dt) {
-		std::cout << "  timestep " << dt << "\n";
+		if (pre_time_step_callback) {
+			pre_time_step_callback(dt);
+		}
+
 		_add_spring_forces(dt, 1, 0);
+		if (post_correction_callback) {
+			post_correction_callback(dt);
+		}
+
 		_advect_particles(dt);
+		if (post_advection_callback) {
+			post_advection_callback(dt);
+		}
+
 		hash_particles();
 		_transfer_to_grid();
-		// add external forces
+		if (post_particle_to_grid_transfer_callback) {
+			post_particle_to_grid_transfer_callback(dt);
+		}
+
+		// add gravity
 		for (std::size_t z = 0; z < grid().grid().get_size().z; ++z) {
 			for (std::size_t y = 0; y < grid().grid().get_size().y; ++y) {
 				for (std::size_t x = 0; x < grid().grid().get_size().x; ++x) {
-					grid().grid()(x, y, z).velocities_posface += vec3d(0.0, -981.0, 0.0) * dt;
+					grid().grid()(x, y, z).velocities_posface += gravity * dt;
 				}
 			}
 		}
+		if (post_gravity_callback) {
+			post_gravity_callback(dt);
+		}
+
 		// solve and apply pressure
 		{
 			std::vector<vec3s> fluid_cells = _space_hash.get_sorted_occupied_cells();
 			pressure_solver solver(*this, fluid_cells);
 			auto [pressure, residual, iters] = solver.solve(dt);
-			if (iters >= solver.max_iterations) {
-				std::cerr << "    WARNING: maximum iterations exceeded\n";
+			if (post_pressure_solve_callback) {
+				post_pressure_solve_callback(dt, pressure, residual, iters);
 			}
-			solver.apply_pressure(dt, pressure);
 
-			std::cerr << "    iterations = " << iters << "\n";
-			std::cerr << "    residual = " << residual << "\n";
-			auto max_it = std::max_element(pressure.begin(), pressure.end());
-			if (max_it != pressure.end()) {
-				std::cerr << "    max pressure = " << *std::max_element(pressure.begin(), pressure.end()) << "\n";
+			solver.apply_pressure(dt, pressure);
+			if (post_apply_pressure_callback) {
+				post_apply_pressure_callback(dt);
 			}
-			double maxv = 0.0;
-			for (const particle &p : _particles) {
-				maxv = std::max(maxv, p.velocity.squared_length());
-			}
-			std::cerr << "    max velocity = " << std::sqrt(maxv) << "\n";
 		}
+
 		_transfer_from_grid();
+		if (post_grid_to_particle_transfer_callback) {
+			post_grid_to_particle_transfer_callback(dt);
+		}
 	}
 
 	void simulation::time_step() {

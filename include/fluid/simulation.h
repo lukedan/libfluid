@@ -5,6 +5,7 @@
 
 #include <random>
 #include <deque>
+#include <functional>
 
 #include <pcg_random.hpp>
 
@@ -111,8 +112,37 @@ namespace fluid {
 			return _particles;
 		}
 
+		// callbacks
+		// the order in which they're defined is the order in which they'll be called
+		/// The function that will be called as soon as a new time step begins. The parameter is the delta time.
+		std::function<void(double)> pre_time_step_callback;
+		/// The function that will be called in each time step after particle positions have been corrected. The
+		/// parameter is the delta time.
+		std::function<void(double)> post_correction_callback;
+		/// The function that will be called in each time step after particles have been advected. The parameter is
+		/// the delta time.
+		std::function<void(double)> post_advection_callback;
+		/// The function that will be called in each time step after particles have been hashed and their velocities
+		/// have been transferred to the grid. The parameter is the delta time.
+		std::function<void(double)> post_particle_to_grid_transfer_callback;
+		/// The function that will be called in each time step after gravity has been added to the velocities. The
+		/// parameter is the delta time.
+		std::function<void(double)> post_gravity_callback;
+		/// The function that will be called in each time step after solving for pressure but before the pressure is
+		/// applied. The parameter is the delta time, while the rest correspond to the return values of
+		/// \ref pressure_solver::solve().
+		std::function<void(double, std::vector<double>&, double, std::size_t)> post_pressure_solve_callback;
+		/// The function that will be called in each time step after pressure has been applied. The parameter is the
+		/// delta time.
+		std::function<void(double)> post_apply_pressure_callback;
+		/// The function that will be called in each time step after velocities have been transferred from the grid
+		/// to the particles. The parameter is the delta time.
+		std::function<void(double)> post_grid_to_particle_transfer_callback;
+
 		pcg32 random; ///< The random engine for the simulation.
-		vec3d grid_offset; ///< The offset of the grid's origin.
+		vec3d
+			grid_offset, ///< The offset of the grid's origin.
+			gravity; ///< The gravity.
 		double
 			cfl_number = 3.0, ///< The CFL number.
 			cell_size = std::numeric_limits<double>::quiet_NaN(), ///< The size of each grid cell.
