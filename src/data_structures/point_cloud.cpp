@@ -1,4 +1,4 @@
-#include "data_structures/point_cloud.h"
+#include "fluid/data_structures/point_cloud.h"
 
 /// \file
 /// Implementation of certain point cloud related functions.

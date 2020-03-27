@@ -1,4 +1,4 @@
-#include "pressure_solver.h"
+#include "fluid/pressure_solver.h"
 
 /// \file
 /// Implementation of the pressure solver.

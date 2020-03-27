@@ -14,10 +14,7 @@ target_compile_features(fluid
 target_include_directories(fluid
 	PUBLIC
 		3rdparty/pcg-cpp/include/
-	INTERFACE
-		include/
-	PRIVATE
-		include/fluid/)
+		include/)
 target_sources(fluid
 	PRIVATE
 		src/fluid_grid.cpp
@@ -58,9 +55,10 @@ if(FLUID_BUILD_MAYA_PLUGIN)
 		PRIVATE cxx_std_17)
 	target_sources(fluid_maya
 		PRIVATE
-			plugins/maya/main.cpp
+			plugins/maya/grid_node.cpp
 			plugins/maya/mesher_node.cpp
-			plugins/maya/point_cloud_loader_node.cpp)
+			plugins/maya/point_cloud_loader_node.cpp
+			plugins/maya/main.cpp)
 
 	target_include_directories(fluid_maya
 		PRIVATE

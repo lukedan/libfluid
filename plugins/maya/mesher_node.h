@@ -20,13 +20,12 @@ namespace fluid::maya {
 			attr_output_mesh; ///< The output mesh node attribute.
 		static MTypeId id; ///< The ID of this node.
 
-		/// Updates the simulation and creates the mesh.
+		/// Updates the mesh.
 		MStatus compute(const MPlug&, MDataBlock&) override;
 
 		/// Creation function passed to \p MFnPlugin::registerNode().
 		static void *creator();
 		/// Initialization function passed to \p MFnPlugin::registerNode().
 		static MStatus initialize();
-	private:
 	};
 }

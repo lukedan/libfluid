@@ -90,8 +90,9 @@ void simulation_thread() {
 			sim.particles().clear();
 
 			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
-			sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));
+			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
+			sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);
 
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
@@ -152,14 +153,11 @@ void mesher_thread() {
 		}
 
 		fluid::mesher mesher;
-		mesher.particle_extent = 2.0; // TODO what effects does this have?
+		mesher.particle_extent = 2.0; // TODO values close or smaller than 1 causes holes to appear in meshes
 		mesher.cell_radius = 3;
-		/*mesher.grid_offset = vec3d(-1.0, -1.0, -1.0);
+		mesher.grid_offset = vec3d(-1.0, -1.0, -1.0);
 		mesher.cell_size = 0.5;
-		mesher.resize(vec3s(104, 104, 104));*/
-		mesher.grid_offset = vec3d();
-		mesher.cell_size = 0.5;
-		mesher.resize(vec3s(100, 100, 100));
+		mesher.resize(vec3s(104, 104, 104));
 		fluid::mesher::mesh_t mesh = mesher.generate_mesh(particles, 0.5);
 		mesh.generate_normals();
 

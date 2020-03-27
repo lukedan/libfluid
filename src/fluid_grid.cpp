@@ -1,4 +1,4 @@
-#include "fluid_grid.h"
+#include "fluid/fluid_grid.h"
 
 /// \file
 /// Implementation of the fluid grid.

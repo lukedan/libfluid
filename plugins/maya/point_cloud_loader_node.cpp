@@ -17,7 +17,6 @@ namespace fluid::maya {
 	MObject
 		point_cloud_loader_node::attr_file_name,
 		point_cloud_loader_node::attr_output_points;
-	MTypeId point_cloud_loader_node::id{ 0x98765433 };
 
 	void *point_cloud_loader_node::creator() {
 		return new point_cloud_loader_node();
@@ -47,35 +46,36 @@ namespace fluid::maya {
 	}
 
 	MStatus point_cloud_loader_node::compute(const MPlug &plug, MDataBlock &data_block) {
-		if (plug == attr_output_points) {
-			MStatus stat;
-
-			MDataHandle file_name_data = data_block.inputValue(attr_file_name, &stat);
-			FLUID_MAYA_CHECK(stat, "retrieve attribute");
-			MDataHandle output_points_data = data_block.outputValue(attr_output_points, &stat);
-			FLUID_MAYA_CHECK(stat, "retrieve attribute");
-
-			MPointArray points;
-			{
-				std::ifstream fin(file_name_data.asString().asUTF8());
-				point_cloud::load_from_naive(
-					fin,
-					[&points](vec3d p) {
-						MStatus stat = points.append(MPoint(p.x, p.y, p.z));
-						if (!stat) {
-							stat.perror("MPointArray::append() failed");
-						}
-					}
-				);
-			}
-
-			MFnPointArrayData points_array;
-			MObject points_array_data = points_array.create(points, &stat);
-			FLUID_MAYA_CHECK(stat, "finalize compute");
-			FLUID_MAYA_CHECK_RETURN(output_points_data.set(points_array_data), "finalize compute");
-			output_points_data.setClean();
-			return MStatus::kSuccess;
+		if (plug != attr_output_points) {
+			return MStatus::kUnknownParameter;
 		}
-		return MStatus::kUnknownParameter;
+
+		MStatus stat;
+
+		MDataHandle file_name_data = data_block.inputValue(attr_file_name, &stat);
+		FLUID_MAYA_CHECK(stat, "retrieve attribute");
+		MDataHandle output_points_data = data_block.outputValue(attr_output_points, &stat);
+		FLUID_MAYA_CHECK(stat, "retrieve attribute");
+
+		MPointArray points;
+		{
+			std::ifstream fin(file_name_data.asString().asUTF8());
+			point_cloud::load_from_naive(
+				fin,
+				[&points](vec3d p) {
+					MStatus stat = points.append(MPoint(p.x, p.y, p.z));
+					if (!stat) {
+						stat.perror("MPointArray::append() failed");
+					}
+				}
+			);
+		}
+
+		MFnPointArrayData points_array;
+		MObject points_array_data = points_array.create(points, &stat);
+		FLUID_MAYA_CHECK(stat, "finalize compute");
+		FLUID_MAYA_CHECK_RETURN(output_points_data.set(points_array_data), "finalize compute");
+		output_points_data.setClean();
+		return MStatus::kSuccess;
 	}
 }

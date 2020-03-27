@@ -6,8 +6,15 @@
 #include <maya/MFnPlugin.h>
 
 #include "misc.h"
+#include "grid_node.h"
 #include "mesher_node.h"
 #include "point_cloud_loader_node.h"
+
+namespace fluid::maya {
+	MTypeId grid_node::id{ 0x98765432 };
+	MTypeId mesher_node::id{ 0x98765433 };
+	MTypeId point_cloud_loader_node::id{ 0x98765434 };
+}
 
 /// Initializes the plugin.
 MStatus initializePlugin(MObject obj) {
@@ -29,17 +36,24 @@ MStatus initializePlugin(MObject obj) {
 			),
 		"node registration"
 	);
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.registerNode(
+			"GridNode", fluid::maya::grid_node::id,
+			fluid::maya::grid_node::creator, fluid::maya::grid_node::initialize
+			),
+		"node registration"
+	);
 
-	return status;
+	return MStatus::kSuccess;
 }
 
 /// Uninitializes the plugin.
 MStatus uninitializePlugin(MObject obj) {
-	MStatus status = MStatus::kSuccess;
 	MFnPlugin plugin(obj);
 
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::mesher_node::id), "node deregisteration");
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::point_cloud_loader_node::id), "node deregisteration");
+	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::grid_node::id), "node deregistration");
 
-	return status;
+	return MStatus::kSuccess;
 }

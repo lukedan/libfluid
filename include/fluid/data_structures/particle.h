@@ -3,7 +3,7 @@
 /// \file
 /// Definition of marker particles.
 
-#include "math/vec.h"
+#include "fluid/math/vec.h"
 
 namespace fluid {
 	/// A particle.

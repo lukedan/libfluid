@@ -1,4 +1,4 @@
-#include "simulation.h"
+#include "fluid/simulation.h"
 
 /// \file
 /// Implementation of the fluid simulation.
@@ -8,7 +8,7 @@
 #include <iostream>
 #include <random>
 
-#include "pressure_solver.h"
+#include "fluid/pressure_solver.h"
 
 namespace fluid {
 	void simulation::resize(vec3s sz) {
@@ -55,7 +55,10 @@ namespace fluid {
 
 			std::cerr << "    iterations = " << iters << "\n";
 			std::cerr << "    residual = " << residual << "\n";
-			std::cerr << "    max pressure = " << *std::max_element(pressure.begin(), pressure.end()) << "\n";
+			auto max_it = std::max_element(pressure.begin(), pressure.end());
+			if (max_it != pressure.end()) {
+				std::cerr << "    max pressure = " << *std::max_element(pressure.begin(), pressure.end()) << "\n";
+			}
 			double maxv = 0.0;
 			for (const particle &p : _particles) {
 				maxv = std::max(maxv, p.velocity.squared_length());
@@ -326,17 +329,19 @@ namespace fluid {
 
 	void simulation::_remove_boundary_velocities(fluid_grid &g) {
 		vec3s max_pos = g.grid().get_size() - vec3s(1, 1, 1);
-		for (std::size_t z = 0; z < g.grid().get_size().z; ++z) {
+		if (g.grid().get_array_size(g.grid().get_size()) > 0) {
+			for (std::size_t z = 0; z < g.grid().get_size().z; ++z) {
+				for (std::size_t y = 0; y < g.grid().get_size().y; ++y) {
+					g.grid()(max_pos.x, y, z).velocities_posface.x = 0.0;
+				}
+				for (std::size_t x = 0; x < g.grid().get_size().x; ++x) {
+					g.grid()(x, max_pos.y, z).velocities_posface.y = 0.0;
+				}
+			}
 			for (std::size_t y = 0; y < g.grid().get_size().y; ++y) {
-				g.grid()(max_pos.x, y, z).velocities_posface.x = 0.0;
-			}
-			for (std::size_t x = 0; x < g.grid().get_size().x; ++x) {
-				g.grid()(x, max_pos.y, z).velocities_posface.y = 0.0;
-			}
-		}
-		for (std::size_t y = 0; y < g.grid().get_size().y; ++y) {
-			for (std::size_t x = 0; x < g.grid().get_size().x; ++x) {
-				g.grid()(x, y, max_pos.z).velocities_posface.z = 0.0;
+				for (std::size_t x = 0; x < g.grid().get_size().x; ++x) {
+					g.grid()(x, y, max_pos.z).velocities_posface.z = 0.0;
+				}
 			}
 		}
 	}
@@ -457,6 +462,8 @@ namespace fluid {
 	}
 
 	void simulation::_add_spring_forces(double dt, std::size_t step, std::size_t substep) {
+		// https://github.com/ryichando/shiokaze/blob/53997a4dcaee9ae8c55dcdbd9077f95f1f6c052a/src/flip/macnbflip3.cpp#L377
+		// * not exactly the same implementation *
 		double re = cell_size / std::sqrt(2.0); // some kind of radius
 		// in apic2d, this distribution is actually (0, 1), not sure why
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);

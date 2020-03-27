@@ -41,7 +41,7 @@ namespace fluid {
 		/// Generate the mesh using the marching cubes algorithm.
 		[[nodiscard]] mesh_t _marching_cubes() const;
 		/// Adds a point to the vector, returning its index.
-		[[nodiscard]] std::size_t _add_point(
+		[[nodiscard]] FLUID_FORCEINLINE std::size_t _add_point(
 			std::vector<vec3d> &v, vec3s cell, double *surf_func, std::size_t edge_table_index
 		) const;
 	};
