@@ -20,6 +20,8 @@ namespace fluid::maya {
 			attr_cell_size, ///< The cell size attribute.
 			attr_grid_size, ///< The grid size attribute.
 			attr_grid_offset, ///< The grid offset attribute.
+			attr_gravity, ///< The gravity attribute.
+			attr_transfer_method, ///< The transfer method attribute.
 			attr_output_particle_positions; ///< The particle positions attribute.
 		static MTypeId id; ///< The ID of this node.
 

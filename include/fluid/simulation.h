@@ -158,7 +158,7 @@ namespace fluid {
 
 		/// Space hashing. This is valid after each time step, or you can call \ref hash_particles() to manually
 		/// update this.
-		space_hashing<particle> _space_hash;
+		space_hashing<3, particle*> _space_hash;
 
 		/// Returns the velocities of the negative direction faces of the given cell.
 		[[nodiscard]] static vec3d _get_negative_face_velocities(const fluid_grid&, vec3s);

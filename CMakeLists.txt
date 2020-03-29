@@ -1,10 +1,17 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.9)
 project(libfluid)
 
 set(FLUID_USE_OPENMP ON CACHE BOOL "Whether or not to use OpenMP.")
 set(FLUID_BUILD_TESTBED ON CACHE BOOL "Whether or not to build the testbed.")
 set(FLUID_BUILD_MAYA_PLUGIN ON CACHE BOOL "Whether or not to build the Maya plugin.")
 set(FLUID_MAYA_DEVKIT_PATH "" CACHE PATH "Path to the Maya devkit.")
+
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT FLUID_IPO_SUPPORTED OUTPUT FLUID_IPO_MESSAGE)
+if(NOT FLUID_IPO_SUPPORTED)
+	message(WARNING "IPO is not supported: ${FLUID_IPO_MESSAGE}")
+endif()
 
 
 add_library(fluid)
@@ -21,7 +28,11 @@ target_sources(fluid
 		src/mesher.cpp
 		src/pressure_solver.cpp
 		src/simulation.cpp
-		src/data_structures/point_cloud.cpp)
+		src/data_structures/point_cloud.cpp
+		src/voxelizer.cpp)
+if(FLUID_IPO_SUPPORTED)
+	set_property(TARGET fluid PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 if(FLUID_USE_OPENMP)
 	find_package(OpenMP)
@@ -44,6 +55,9 @@ if(FLUID_BUILD_TESTBED)
 	find_package(glfw3 CONFIG REQUIRED)
 	target_link_libraries(testbed
 		PRIVATE fluid glfw OpenGL::GLU OpenGL::GL)
+	if(FLUID_IPO_SUPPORTED)
+		set_property(TARGET testbed PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+	endif()
 endif()
 
 
@@ -70,4 +84,7 @@ if(FLUID_BUILD_MAYA_PLUGIN)
 		PRIVATE
 			fluid
 			Foundation OpenMaya OpenMayaUI OpenMayaAnim OpenMayaFX OpenMayaRender Image)
+	if(FLUID_IPO_SUPPORTED)
+		set_property(TARGET fluid_maya PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+	endif()
 endif()

@@ -19,8 +19,8 @@ namespace fluid::maya {
 	MObject
 		mesher_node::attr_cell_size,
 		mesher_node::attr_grid_size,
+		mesher_node::attr_grid_offset,
 		mesher_node::attr_particles,
-		mesher_node::attr_particle_offset,
 		mesher_node::attr_particle_size,
 		mesher_node::attr_particle_extents,
 		mesher_node::attr_particle_check_radius,
@@ -41,12 +41,12 @@ namespace fluid::maya {
 		attr_grid_size = grid_size.create("gridSize", "grid", MFnNumericData::k3Int, 50.0, &stat);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
-		MFnTypedAttribute particles;
-		attr_particles = particles.create("particles", "p", MFnData::kPointArray, MObject::kNullObj, &stat);
+		MFnNumericAttribute grid_offset;
+		attr_grid_offset = grid_offset.create("gridOffset", "goff", MFnNumericData::k3Double, 0.0, &stat);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
-		MFnNumericAttribute particle_offset;
-		attr_particle_offset = particle_offset.create("particleOffset", "poff", MFnNumericData::k3Double, 0.0, &stat);
+		MFnTypedAttribute particles;
+		attr_particles = particles.create("particles", "p", MFnData::kPointArray, MObject::kNullObj, &stat);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
 		MFnNumericAttribute particle_size;
@@ -74,7 +74,7 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_cell_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_grid_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_particles), "parameter registration");
-		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_particle_offset), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_grid_offset), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_particle_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_particle_extents), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_particle_check_radius), "parameter registration");
@@ -83,7 +83,7 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_cell_size, attr_output_mesh), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_grid_size, attr_output_mesh), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_particles, attr_output_mesh), "parameter registration");
-		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_particle_offset, attr_output_mesh), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_grid_offset, attr_output_mesh), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_particle_size, attr_output_mesh), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(attributeAffects(attr_particle_extents, attr_output_mesh), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(
@@ -106,7 +106,7 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
 		MDataHandle particles_data = data_block.inputValue(attr_particles, &stat);
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
-		MDataHandle particle_offset_data = data_block.inputValue(attr_particle_offset, &stat);
+		MDataHandle grid_offset_data = data_block.inputValue(attr_grid_offset, &stat);
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
 		MDataHandle particle_size_data = data_block.inputValue(attr_particle_size, &stat);
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
@@ -130,8 +130,8 @@ namespace fluid::maya {
 		}
 		mesh_generator.resize(vec3s(vec3i(grid_size[0], grid_size[1], grid_size[2])));
 		// particle offset
-		const double3 &particle_offset = particle_offset_data.asDouble3();
-		mesh_generator.grid_offset = -vec3d(particle_offset[0], particle_offset[1], particle_offset[2]);
+		const double3 &grid_offset = grid_offset_data.asDouble3();
+		mesh_generator.grid_offset = vec3d(grid_offset[0], grid_offset[1], grid_offset[2]);
 		// particle extent
 		mesh_generator.particle_extent = particle_extents_data.asDouble();
 		// particle check radius

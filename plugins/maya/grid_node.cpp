@@ -6,6 +6,7 @@
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MTime.h>
 #include <maya/MFnNumericAttribute.h>
+#include <maya/MFnEnumAttribute.h>
 #include <maya/MFnTypedAttribute.h>
 #include <maya/MFnPointArrayData.h>
 
@@ -19,6 +20,8 @@ namespace fluid::maya {
 		grid_node::attr_cell_size,
 		grid_node::attr_grid_size,
 		grid_node::attr_grid_offset,
+		grid_node::attr_gravity,
+		grid_node::attr_transfer_method,
 		grid_node::attr_output_particle_positions;
 
 	void *grid_node::creator() {
@@ -44,6 +47,26 @@ namespace fluid::maya {
 		attr_grid_offset = grid_offset.create("gridOffset", "goff", MFnNumericData::k3Double, 0.0, &stat);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
+		MFnNumericAttribute gravity;
+		attr_gravity = gravity.create("gravity", "g", MFnNumericData::k3Double, 0.0, &stat);
+		FLUID_MAYA_CHECK(stat, "parameter creation");
+
+		MFnEnumAttribute transfer_method;
+		attr_transfer_method = transfer_method.create(
+			"transferMethod", "mthd", static_cast<short>(simulation::method::apic), &stat
+		);
+		FLUID_MAYA_CHECK(stat, "parameter creation");
+		FLUID_MAYA_CHECK_RETURN(
+			transfer_method.addField("PIC", static_cast<short>(simulation::method::pic)), "parameter creation"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			transfer_method.addField("FLIPBlend", static_cast<short>(simulation::method::flip_blend)),
+			"parameter creation"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			transfer_method.addField("APIC", static_cast<short>(simulation::method::apic)), "parameter creation"
+		);
+
 		MFnTypedAttribute output_particle_positions;
 		attr_output_particle_positions = output_particle_positions.create(
 			"outputParticlePositions", "out", MFnData::kPointArray, MObject::kNullObj, &stat
@@ -56,6 +79,8 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_cell_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_grid_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_grid_offset), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_gravity), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_transfer_method), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_particle_positions), "parameter registration");
 
 		FLUID_MAYA_CHECK_RETURN(
@@ -69,6 +94,12 @@ namespace fluid::maya {
 		);
 		FLUID_MAYA_CHECK_RETURN(
 			attributeAffects(attr_grid_offset, attr_output_particle_positions), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_gravity, attr_output_particle_positions), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_transfer_method, attr_output_particle_positions), "parameter registration"
 		);
 
 		return MStatus::kSuccess;
@@ -93,6 +124,10 @@ namespace fluid::maya {
 			FLUID_MAYA_CHECK(stat, "retrieve attribute");
 			MDataHandle grid_offset_data = data_block.inputValue(attr_grid_offset, &stat);
 			FLUID_MAYA_CHECK(stat, "retrieve attribute");
+			MDataHandle gravity_data = data_block.inputValue(attr_gravity, &stat);
+			FLUID_MAYA_CHECK(stat, "retrieve attribute");
+			MDataHandle transfer_method_data = data_block.inputValue(attr_transfer_method, &stat);
+			FLUID_MAYA_CHECK(stat, "retrieve attribute");
 
 			simulation sim;
 			// cell size
@@ -108,12 +143,17 @@ namespace fluid::maya {
 			// grid offset
 			const double3 &grid_offset = grid_offset_data.asDouble3();
 			sim.grid_offset = vec3d(grid_offset[0], grid_offset[1], grid_offset[2]);
+			// gravity
+			const double3 &gravity = gravity_data.asDouble3();
+			sim.gravity = vec3d(gravity[0], gravity[1], gravity[2]);
+			// transfer method
+			sim.simulation_method = static_cast<simulation::method>(transfer_method_data.asShort());
 
 			if (_particle_cache.size() > 0) {
 				sim.particles() = std::move(_last_frame_particles);
 			} else {
 				// TODO seed based on sources
-				sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);
+				sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);
 			}
 			sim.hash_particles();
 

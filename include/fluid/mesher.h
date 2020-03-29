@@ -32,7 +32,7 @@ namespace fluid {
 		std::size_t cell_radius = 2; ///< The radius of cells to look at when sampling the fluid to a grid.
 	private:
 		grid3<double> _surface_function; ///< Sampled values of the implicit surface function.
-		space_hashing<const vec3d> _hash; ///< Space hashing.
+		space_hashing<3, const vec3d*> _hash; ///< Space hashing.
 
 		/// The kernel function for weighing particles.
 		[[nodiscard]] FLUID_FORCEINLINE double _kernel(double sqr_dist) const;

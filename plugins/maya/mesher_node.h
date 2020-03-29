@@ -12,8 +12,8 @@ namespace fluid::maya {
 		static MObject
 			attr_cell_size, ///< The cell size node attribute.
 			attr_grid_size, ///< The grid size node attribute.
+			attr_grid_offset, ///< The particle offset attribute.
 			attr_particles, ///< The particles attribute.
-			attr_particle_offset, ///< The particle offset attribute.
 			attr_particle_size, ///< The particle size attribute.
 			attr_particle_extents, ///< The particle extents attribute.
 			attr_particle_check_radius, ///< The particle check radius attribute.

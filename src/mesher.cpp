@@ -335,7 +335,7 @@ namespace fluid {
 		for (const vec3d &p : particles) {
 			vec3i index((p - grid_offset) / cell_size);
 			if (index.x > 0 && index.y > 0 && index.z > 0) {
-				_hash.add_object_at(vec3s(index), p);
+				_hash.add_object_at(vec3s(index), &p);
 			}
 		}
 		vec3s
@@ -352,14 +352,15 @@ namespace fluid {
 					bool has_particles = false;
 					_hash.for_all_nearby_objects(
 						vec3s(x, y, z), min_offset, max_offset,
-						[&](const vec3d &p) {
+						[&](const vec3d *p) {
+							vec3d pos = *p;
 							has_particles = true;
 							double w = _kernel(
-							(p - grid_pos).squared_length() / (particle_extent * particle_extent)
+							(pos - grid_pos).squared_length() / (particle_extent * particle_extent)
 							);
 							tot_weight += w;
 							tot_rad += w * r;
-							tot_pos += w * p;
+							tot_pos += w * pos;
 						}
 					);
 					double value = 1.0;

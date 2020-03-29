@@ -92,7 +92,7 @@ namespace fluid {
 	void simulation::seed_cell(vec3s cell, vec3d velocity, std::size_t density) {
 		std::size_t
 			index = grid().grid().index_to_raw(cell),
-			num = _space_hash.get_objects_at(cell).size(),
+			num = _space_hash.get_num_objects_at(cell),
 			target = density * density * density;
 		std::uniform_real_distribution<double> dist(0.0, cell_size);
 		vec3d offset = grid_offset + vec3d(cell) * cell_size;
@@ -101,7 +101,7 @@ namespace fluid {
 			p.grid_index = cell;
 			p.position = offset + vec3d(dist(random), dist(random), dist(random));
 			p.velocity = velocity;
-			_space_hash.add_object_at_raw(index, p);
+			_space_hash.add_object_at_raw(index, &p);
 			_particles.emplace_back(p);
 		}
 	}
@@ -201,7 +201,7 @@ namespace fluid {
 				},
 				grid_pos, grid().grid().get_size()
 					);
-			_space_hash.add_object_at_unchecked(p.grid_index, p);
+			_space_hash.add_object_at_unchecked(p.grid_index, &p);
 		}
 	}
 
@@ -224,19 +224,19 @@ namespace fluid {
 							zface(xpos, ypos, zpos_face);
 						_space_hash.for_all_nearby_objects(
 							vec3s(x, y, z), vec3s(1, 1, 1), vec3s(1, 1, 1),
-							[&](particle &p) {
+							[&](particle *p) {
 								vec3d weights(
-									_kernel((p.position - xface) / cell_size),
-									_kernel((p.position - yface) / cell_size),
-									_kernel((p.position - zface) / cell_size)
+									_kernel((p->position - xface) / cell_size),
+									_kernel((p->position - yface) / cell_size),
+									_kernel((p->position - zface) / cell_size)
 								);
 								sum_weight += weights;
-								sum_vel += vec_ops::memberwise::mul(weights, p.velocity);
+								sum_vel += vec_ops::memberwise::mul(weights, p->velocity);
 							}
 						);
 
 						cell.cell_type = fluid_grid::cell::type::air;
-						if (!_space_hash.get_objects_at(vec3s(x, y, z)).empty()) {
+						if (_space_hash.get_num_objects_at(vec3s(x, y, z)) != 0) {
 							cell.cell_type = fluid_grid::cell::type::fluid;
 						}
 						vec_ops::apply_to(
@@ -277,25 +277,25 @@ namespace fluid {
 							zface(xpos, ypos, zpos_face);
 						_space_hash.for_all_nearby_objects(
 							vec3s(x, y, z), vec3s(1, 1, 1), vec3s(1, 1, 1),
-							[&](particle &p) {
+							[&](particle *p) {
 								vec3d
 									weights(
-										_kernel(p.position - xface),
-										_kernel(p.position - yface),
-										_kernel(p.position - zface)
+										_kernel(p->position - xface),
+										_kernel(p->position - yface),
+										_kernel(p->position - zface)
 									),
 									affine(
-										vec_ops::dot(p.cx, xface - p.position),
-										vec_ops::dot(p.cy, yface - p.position),
-										vec_ops::dot(p.cz, zface - p.position)
+										vec_ops::dot(p->cx, xface - p->position),
+										vec_ops::dot(p->cy, yface - p->position),
+										vec_ops::dot(p->cz, zface - p->position)
 									);
 								sum_weight += weights;
-								sum_vel += vec_ops::memberwise::mul(weights, p.velocity + affine);
+								sum_vel += vec_ops::memberwise::mul(weights, p->velocity + affine);
 							}
 						);
 
 						cell.cell_type = fluid_grid::cell::type::air;
-						if (!_space_hash.get_objects_at(vec3s(x, y, z)).empty()) {
+						if (_space_hash.get_num_objects_at(vec3s(x, y, z)) != 0) {
 							cell.cell_type = fluid_grid::cell::type::fluid;
 						}
 						vec_ops::apply_to(
@@ -495,9 +495,9 @@ namespace fluid {
 				vec3d spring;
 				_space_hash.for_all_nearby_objects(
 					p.grid_index, vec3s(1, 1, 1), vec3s(1, 1, 1),
-					[&](const particle &other) {
-						if (&other != &p) {
-							vec3d offset = p.position - other.position;
+					[&](const particle *other) {
+						if (other != &p) {
+							vec3d offset = p.position - other->position;
 							double sqr_dist = offset.squared_length();
 							if (sqr_dist < min_dist * min_dist) {
 								// the two particles are not too far away, so just add a random force to avoid
