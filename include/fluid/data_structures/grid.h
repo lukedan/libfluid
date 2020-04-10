@@ -21,6 +21,14 @@ namespace fluid {
 		}
 		/// Initializes the cell storage, seting all cells to the given value.
 		grid(size_type size, const Cell &c) : _cells(get_array_size(size)), _size(size) {
+			std::size_t mul = 1;
+			vec_ops::for_each(
+				[&mul](std::size_t &offset, std::size_t size) {
+					offset = mul;
+					mul *= size;
+				},
+				_layer_offset, get_size()
+					);
 		}
 
 		/// Indexing.
@@ -93,18 +101,27 @@ namespace fluid {
 			return result;
 		}
 
+		/// Executes the given callback for each cell in the grid. The order in which the cells are visited is the
+		/// same as the order in which they're stored in memory.
+		template <typename Callback> void for_each(Callback &cb) {
+			_for_each_impl_wrapper(cb, size_type(), _size, std::make_index_sequence<Dim>());
+		}
+		/// Executes the given callback for the given range of the grid. The order in which the cells are visited is
+		/// as close to the order in which they're stored in memory as possible.
+		template <typename Callback> void for_each_in_range(Callback &cb, size_type min, size_type max) {
+			_for_each_impl_wrapper(cb, min, max, std::make_index_sequence<Dim>());
+		}
+
 		/// Converts a (x, y, z) position into a raw index for \ref _cells.
 		std::size_t index_to_raw(size_type i) const {
-			std::size_t total = 0, mul = 1;
+			// hopefully the compiler will optimize away this empty check in the release build
 			vec_ops::for_each(
-				[&total, &mul](std::size_t coord, std::size_t size) {
+				[](std::size_t coord) {
 					assert(coord < size);
-					total += mul * coord;
-					mul *= size;
 				},
-				i, get_size()
+				i
 					);
-			return total;
+			return vec_ops::dot(i, _layer_offset);
 		}
 		/// Converts a raw index for \ref _cells to a (x, y, z) position.
 		size_type index_from_raw(std::size_t i) const {
@@ -132,7 +149,40 @@ namespace fluid {
 		}
 	private:
 		std::vector<Cell> _cells; ///< Cell storage.
-		size_type _size; ///< The size of this grid.
+		size_type
+			_size, ///< The size of this grid.
+			/// The offset that is used to obtain consecutive cells in a certain dimension. For example,
+			/// \p _layer_offset[0] is 1, \p _layer_offset[1] is \p _size[0], \p _layer_offset[2] is
+			/// <tt>_size[0] * _size[1]</tt>, and so on.
+			_layer_offset;
+
+		/// Wrapper around \ref _for_each_impl(). Call this with \p std::make_index_sequence<Dim>.
+		template <std::size_t ...Dims, typename Callback> FLUID_FORCEINLINE void _for_each_impl_wrapper(
+			Callback &cb, size_type min, size_type max, std::index_sequence<Dims...>
+		) {
+			size_type cur = min;
+			auto it = _cells.begin() + index_to_raw(min);
+			_for_each_impl<(Dim - 1 - Dims)...>(cb, it, min, max, cur);
+		}
+		/// The implementation of the \ref for_each() function, for one dimension.
+		template <
+			std::size_t ThisDim, std::size_t ...OtherDims, typename Callback, typename It
+		> FLUID_FORCEINLINE void _for_each_impl(
+			Callback &cb, const It &it, size_type min, size_type max, size_type &cur
+		) const {
+			It my_it = it;
+			std::size_t &i = cur[ThisDim];
+			for (i = min[ThisDim]; i < max[ThisDim]; ++i) {
+				_for_each_impl<OtherDims...>(cb, my_it, min, max, cur);
+				my_it += _layer_offset[ThisDim];
+			}
+		}
+		/// End of recursion, where the callback is actually invoked.
+		template <typename Callback, typename It> FLUID_FORCEINLINE void _for_each_impl(
+			Callback &cb, It it, size_type min, size_type max, size_type cur
+		) const {
+			cb(cur, *it);
+		}
 	};
 
 	template <typename Cell> using grid2 = grid<2, Cell>; ///< Shorthand for 2D grids.

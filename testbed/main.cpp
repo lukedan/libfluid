@@ -84,6 +84,7 @@ void simulation_thread() {
 	sim.grid_offset = sim_grid_offset;
 	sim.cell_size = sim_cell_size;
 	sim.simulation_method = fluid::simulation::method::apic;
+	sim.blending_factor = 0.99;
 	sim.gravity = vec3d(0.0, -981.0, 0.0);
 
 	sim.pre_time_step_callback = [](double dt) {
@@ -107,29 +108,58 @@ void simulation_thread() {
 		std::cout << "    max particle velocity = " << std::sqrt(maxv) << "\n";
 	};
 
+	{
+		auto source = std::make_unique<fluid::source>();
+
+		/*for (std::size_t x = 0; x < 3; ++x) {
+			for (std::size_t y = 35; y < 45; ++y) {
+				for (std::size_t z = 20; z < 30; ++z) {
+					source->cells.emplace_back(x, y, z);
+				}
+			}
+		}
+		source->coerce_velocity = true;*/
+
+		for (std::size_t x = 20; x < 30; ++x) {
+			for (std::size_t y = 35; y < 36; ++y) {
+				for (std::size_t z = 20; z < 30; ++z) {
+					int ix = x, iz = z;
+					ix -= 25;
+					iz -= 25;
+					if (ix * ix + iz * iz < 25) {
+						source->cells.emplace_back(x, y, z);
+					}
+				}
+			}
+		}
+
+		source->velocity = vec3d(0.0, 0.0, 0.0);
+		/*sim.sources.emplace_back(std::move(source));*/
+	}
+
+	{
+		sim.grid().grid().for_each_in_range(
+			[](vec3s, fluid::fluid_grid::cell &cell) {
+				cell.cell_type = fluid::fluid_grid::cell::type::solid;
+			},
+			vec3s(20, 0, 20), vec3s(30, 10, 30)
+				);
+	}
+
 	while (true) {
 		if (sim_reset) {
 			sim.particles().clear();
 
 			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
-			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
+			sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
 			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);*/
-			sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);
+			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);*/
 
 			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
 
 			/*sim.seed_sphere(vec3d(25, 40, 25), 5);
 			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));*/
-
-			/*std::size_t x = 0;
-			for (std::size_t y = 35; y < 45; ++y) {
-				for (std::size_t z = 20; z < 30; ++z) {
-					fluid::fluid_grid::cell &cell = sim.grid().grid()(x, y, z);
-					cell.cell_type = fluid::fluid_grid::cell::type::solid;
-					cell.velocities_posface = vec3d(100.0, 0.0, 0.0);
-				}
-			}*/
 
 			sim.reset_space_hash();
 
@@ -138,16 +168,8 @@ void simulation_thread() {
 		}
 
 		if (!sim_paused) {
-			/*for (std::size_t x = 1; x < 5; ++x) {
-				for (std::size_t y = 35; y < 45; ++y) {
-					for (std::size_t z = 20; z < 30; ++z) {
-						sim.seed_cell(vec3s(x, y, z), vec3d(100.0, 0.0, 0.0));
-					}
-				}
-			}*/
-
 			std::cout << "update\n";
-			sim.update(1.0 / 30.0);
+			sim.update(1.0 / 60.0);
 			update_simulation(sim);
 		} else if (sim_advance) {
 			sim_advance = false;

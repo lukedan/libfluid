@@ -24,12 +24,12 @@ target_include_directories(fluid
 		include/)
 target_sources(fluid
 	PRIVATE
-		src/fluid_grid.cpp
-		src/mesher.cpp
-		src/pressure_solver.cpp
-		src/simulation.cpp
-		src/data_structures/point_cloud.cpp
-		src/voxelizer.cpp)
+		"src/fluid_grid.cpp"
+		"src/mesher.cpp"
+		"src/pressure_solver.cpp"
+		"src/simulation.cpp"
+		"src/data_structures/point_cloud.cpp"
+		"src/voxelizer.cpp")
 if(FLUID_IPO_SUPPORTED)
 	set_property(TARGET fluid PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
@@ -49,7 +49,7 @@ if(FLUID_BUILD_TESTBED)
 	target_compile_features(testbed
 		PRIVATE cxx_std_17)
 	target_sources(testbed
-		PRIVATE testbed/main.cpp)
+		PRIVATE "testbed/main.cpp")
 
 	find_package(OpenGL REQUIRED)
 	find_package(glfw3 CONFIG REQUIRED)
@@ -69,10 +69,11 @@ if(FLUID_BUILD_MAYA_PLUGIN)
 		PRIVATE cxx_std_17)
 	target_sources(fluid_maya
 		PRIVATE
-			plugins/maya/grid_node.cpp
-			plugins/maya/mesher_node.cpp
-			plugins/maya/point_cloud_loader_node.cpp
-			plugins/maya/main.cpp)
+			"plugins/maya/nodes/grid_node.cpp"
+			"plugins/maya/nodes/mesher_node.cpp"
+			"plugins/maya/nodes/point_cloud_loader_node.cpp"
+			"plugins/maya/nodes/voxelizer_node.cpp"
+			"plugins/maya/main.cpp")
 
 	target_include_directories(fluid_maya
 		PRIVATE

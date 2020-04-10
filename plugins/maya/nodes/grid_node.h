@@ -22,6 +22,15 @@ namespace fluid::maya {
 			attr_grid_offset, ///< The grid offset attribute.
 			attr_gravity, ///< The gravity attribute.
 			attr_transfer_method, ///< The transfer method attribute.
+			// fluid source attributes
+			attr_source_cells, ///< The cells occupied by each fluid source.
+			attr_source_velocity, ///< The velocities of each fluid source.
+			attr_source_enabled, ///< Whether each fluid source is enabled.
+			/// Whether or not to force all particles in each fluid source to have the desired velocity.
+			attr_source_coerce_velocity,
+			attr_source_seeding_density, ///< The desired density inside the source region.
+			attr_sources, ///< Compound attribute that includes data of all fluid sources.
+			// output
 			attr_output_particle_positions; ///< The particle positions attribute.
 		static MTypeId id; ///< The ID of this node.
 

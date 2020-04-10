@@ -21,10 +21,14 @@ namespace fluid {
 		};
 
 		/// Tests if the given axis-aligned box overlaps the given triangle.
-		static bool box_triangle_overlap(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3);
+		[[nodiscard]] static bool box_triangle_overlap(
+			vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3
+		);
 		/// Tests if the given axis-aligned box overlaps the given triangle, assuming that the box overlaps with the
 		/// triangle's AABB.
-		static bool box_triangle_overlap_no_aabb(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3);
+		[[nodiscard]] static bool box_triangle_overlap_no_aabb(
+			vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3
+		);
 		/// Returns the bounding box of the given list of vertices.
 		template <typename It> inline static std::pair<vec3d, vec3d> get_bounding_box(It beg, It end) {
 			if (beg == end) {

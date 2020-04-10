@@ -13,7 +13,7 @@
 #include <fluid/mesher.h>
 #include <fluid/data_structures/mesh.h>
 
-#include "misc.h"
+#include "../misc.h"
 
 namespace fluid::maya {
 	MObject
@@ -34,11 +34,11 @@ namespace fluid::maya {
 		MStatus stat;
 
 		MFnNumericAttribute cell_size;
-		attr_cell_size = cell_size.create("cellSize", "cell", MFnNumericData::kDouble, 1.0, &stat);
+		attr_cell_size = cell_size.create("cellSize", "cell", MFnNumericData::kDouble, 0.4, &stat);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
 		MFnNumericAttribute grid_size;
-		attr_grid_size = grid_size.create("gridSize", "grid", MFnNumericData::k3Int, 50.0, &stat);
+		attr_grid_size = grid_size.create("gridSize", "grid", MFnNumericData::k3Int, 150.0, &stat);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
 		MFnNumericAttribute grid_offset;

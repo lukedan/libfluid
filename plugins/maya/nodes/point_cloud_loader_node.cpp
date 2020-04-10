@@ -11,7 +11,7 @@
 
 #include <fluid/data_structures/point_cloud.h>
 
-#include "misc.h"
+#include "../misc.h"
 
 namespace fluid::maya {
 	MObject

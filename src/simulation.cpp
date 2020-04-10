@@ -32,17 +32,14 @@ namespace fluid {
 			pre_time_step_callback(dt);
 		}
 
-		_add_spring_forces(dt, 1, 0);
-		if (post_correction_callback) {
-			post_correction_callback(dt);
-		}
-
 		_advect_particles(dt);
 		if (post_advection_callback) {
 			post_advection_callback(dt);
 		}
 
 		hash_particles();
+		_update_sources();
+
 		_transfer_to_grid();
 		if (post_particle_to_grid_transfer_callback) {
 			post_particle_to_grid_transfer_callback(dt);
@@ -63,6 +60,17 @@ namespace fluid {
 		// solve and apply pressure
 		{
 			std::vector<vec3s> fluid_cells = _space_hash.get_sorted_occupied_cells();
+			// remove solid cells
+			auto end = fluid_cells.end();
+			for (auto it = fluid_cells.begin(); it != end; ) {
+				if (grid().grid()(*it).cell_type == fluid_grid::cell::type::solid) {
+					std::swap(*--end, *it);
+				} else {
+					++it;
+				}
+			}
+			fluid_cells.erase(end, fluid_cells.end());
+
 			pressure_solver solver(*this, fluid_cells);
 			auto [pressure, residual, iters] = solver.solve(dt);
 			if (post_pressure_solve_callback) {
@@ -73,6 +81,11 @@ namespace fluid {
 			if (post_apply_pressure_callback) {
 				post_apply_pressure_callback(dt);
 			}
+		}
+
+		_correct_positions(dt);
+		if (post_correction_callback) {
+			post_correction_callback(dt);
 		}
 
 		_transfer_from_grid();
@@ -386,34 +399,34 @@ namespace fluid {
 						v_old.v000.x, v_old.v001.x, v_old.v010.x, v_old.v011.x,
 						v_old.v100.x, v_old.v101.x, v_old.v110.x, v_old.v111.x,
 						tmid.z, tmid.y, t.x
-						),
+					),
 					trilerp(
 						v_old.v000.y, v_old.v001.y, v_old.v010.y, v_old.v011.y,
 						v_old.v100.y, v_old.v101.y, v_old.v110.y, v_old.v111.y,
 						tmid.z, t.y, tmid.x
-						),
+					),
 					trilerp(
 						v_old.v000.z, v_old.v001.z, v_old.v010.z, v_old.v011.z,
 						v_old.v100.z, v_old.v101.z, v_old.v110.z, v_old.v111.z,
 						t.z, tmid.y, tmid.x
-						)
+					)
 				),
 				new_velocity(
 					trilerp(
 						v_new.v000.x, v_new.v001.x, v_new.v010.x, v_new.v011.x,
 						v_new.v100.x, v_new.v101.x, v_new.v110.x, v_new.v111.x,
 						tmid.z, tmid.y, t.x
-						),
+					),
 					trilerp(
 						v_new.v000.y, v_new.v001.y, v_new.v010.y, v_new.v011.y,
 						v_new.v100.y, v_new.v101.y, v_new.v110.y, v_new.v111.y,
 						tmid.z, t.y, tmid.x
-						),
+					),
 					trilerp(
 						v_new.v000.z, v_new.v001.z, v_new.v010.z, v_new.v011.z,
 						v_new.v100.z, v_new.v101.z, v_new.v110.z, v_new.v111.z,
 						t.z, tmid.y, tmid.x
-						)
+					)
 				);
 			p.velocity = new_velocity + (p.velocity - old_velocity) * blend;
 		}
@@ -474,23 +487,20 @@ namespace fluid {
 		}
 	}
 
-	void simulation::_add_spring_forces(double dt, std::size_t step, std::size_t substep) {
+	void simulation::_correct_positions(double dt) {
+		// "Preserving Fluid Sheets with Adaptively Sampled Anisotropic Particles"
 		// https://github.com/ryichando/shiokaze/blob/53997a4dcaee9ae8c55dcdbd9077f95f1f6c052a/src/flip/macnbflip3.cpp#L377
-		// * not exactly the same implementation *
-		double re = cell_size / std::sqrt(2.0); // some kind of radius
-		// in apic2d, this distribution is actually (0, 1), not sure why
+
+		double re = cell_size / std::sqrt(2.0); // particle radius
 		std::uniform_real_distribution<double> dist(-1.0, 1.0);
-		double min_dist = 0.1 * re;
 		std::vector<vec3d> new_positions(_particles.size());
-		int
-			istep = static_cast<int>(step),
-			isubstep = static_cast<int>(substep),
-			isize = static_cast<int>(_particles.size());
+
+		int isize = static_cast<int>(_particles.size());
 #pragma omp parallel
 		{
 			pcg32 thread_rand(std::random_device{}());
 #pragma omp for
-			for (int i = isubstep; i < isize; i += istep) {
+			for (int i = 0; i < isize; ++i) {
 				const particle &p = _particles[i];
 				vec3d spring;
 				_space_hash.for_all_nearby_objects(
@@ -499,27 +509,51 @@ namespace fluid {
 						if (other != &p) {
 							vec3d offset = p.position - other->position;
 							double sqr_dist = offset.squared_length();
-							if (sqr_dist < min_dist * min_dist) {
-								// the two particles are not too far away, so just add a random force to avoid
-								// floating point errors
-								// apic2d multiplies this value by 0.01 * dt here
-								spring += re * vec3d(dist(thread_rand), dist(thread_rand), dist(thread_rand));
+							if (sqr_dist < 1e-12) {
+								// the two particles are not too far away, weight is 1, so just add a random force
+								// to avoid floating point errors
+								spring += vec3d(dist(thread_rand), dist(thread_rand), dist(thread_rand));
 							} else {
-								double kernel_lower = 1.0 - sqr_dist / (cell_size * cell_size);
+								double kernel_lower = 1.0 - sqr_dist / (re * re);
 								double kernel = 0.0;
 								if (kernel_lower > 0.0) {
 									kernel = kernel_lower * kernel_lower * kernel_lower;
 								}
-								spring += (kernel * re / std::sqrt(sqr_dist)) * offset;
+								spring += (kernel / std::sqrt(sqr_dist)) * offset;
 							}
 						}
 					}
 				);
-				new_positions[i] = p.position + spring * dt;
+				new_positions[i] = p.position + spring * (dt * correction_stiffness * re);
 			}
 		}
-		for (std::size_t i = substep; i < _particles.size(); i += step) {
-			_particles[i].position = new_positions[i];
+
+		// apply new positions & clamp back to the grid
+		vec3d grid_max = grid_offset + vec3d(grid().grid().get_size()) * cell_size;
+		for (std::size_t i = 0; i < _particles.size(); ++i) {
+			_particles[i].position = vec_ops::apply<vec3d>(
+				std::clamp<double>, new_positions[i], grid_offset, grid_max
+			);
+			_particles[i].grid_index = vec3s((_particles[i].position - grid_offset) / cell_size);
+		}
+	}
+
+	void simulation::_update_sources() {
+		for (auto &src : sources) {
+			if (!src->active) {
+				continue;
+			}
+			for (vec3s v : src->cells) {
+				if (src->coerce_velocity) {
+					_space_hash.for_all_objects_in(
+						v,
+						[&src](particle *p) {
+							p->velocity = src->velocity;
+						}
+					);
+				}
+				seed_cell(v, src->velocity, src->target_density_cubic_root);
+			}
 		}
 	}
 }

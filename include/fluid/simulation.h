@@ -6,6 +6,7 @@
 #include <random>
 #include <deque>
 #include <functional>
+#include <memory>
 
 #include <pcg_random.hpp>
 
@@ -13,6 +14,7 @@
 #include "fluid_grid.h"
 #include "data_structures/particle.h"
 #include "data_structures/space_hashing.h"
+#include "data_structures/source.h"
 
 namespace fluid {
 	/// A fluid simulation.
@@ -116,9 +118,6 @@ namespace fluid {
 		// the order in which they're defined is the order in which they'll be called
 		/// The function that will be called as soon as a new time step begins. The parameter is the delta time.
 		std::function<void(double)> pre_time_step_callback;
-		/// The function that will be called in each time step after particle positions have been corrected. The
-		/// parameter is the delta time.
-		std::function<void(double)> post_correction_callback;
 		/// The function that will be called in each time step after particles have been advected. The parameter is
 		/// the delta time.
 		std::function<void(double)> post_advection_callback;
@@ -135,20 +134,25 @@ namespace fluid {
 		/// The function that will be called in each time step after pressure has been applied. The parameter is the
 		/// delta time.
 		std::function<void(double)> post_apply_pressure_callback;
+		/// The function that will be called in each time step after particle positions have been corrected. The
+		/// parameter is the delta time.
+		std::function<void(double)> post_correction_callback;
 		/// The function that will be called in each time step after velocities have been transferred from the grid
 		/// to the particles. The parameter is the delta time.
 		std::function<void(double)> post_grid_to_particle_transfer_callback;
 
 		pcg32 random; ///< The random engine for the simulation.
+		std::vector<std::unique_ptr<source>> sources;
 		vec3d
 			grid_offset, ///< The offset of the grid's origin.
 			gravity; ///< The gravity.
 		double
 			cfl_number = 3.0, ///< The CFL number.
+			blending_factor = 1.0, ///< The factor used when blending different method together.
 			cell_size = std::numeric_limits<double>::quiet_NaN(), ///< The size of each grid cell.
 			density = 1.0, ///< The density of the fluid.
 			boundary_skin_width = 0.1, ///< The "skin width" at boundaries to prevent particles from "sticking".
-			blending_factor = 1.0; ///< The factor used when blending different method together.
+			correction_stiffness = 5.0; ///< The stiffness used when correcting particle positions.
 		method simulation_method = method::apic; ///< The simulation method.
 	private:
 		std::deque<particle> _particles; ///< All particles.
@@ -191,7 +195,7 @@ namespace fluid {
 		/// \param blend The blend factor. 1.0 means fully FLIP.
 		void _transfer_from_grid_flip(double blend);
 		/// Calculates the c vector.
-		vec3d _calculate_c_vector(
+		[[nodiscard]] vec3d _calculate_c_vector(
 			double v000, double v001, double v010, double v011,
 			double v100, double v101, double v110, double v111,
 			double tx, double ty, double tz
@@ -202,7 +206,11 @@ namespace fluid {
 		void _transfer_from_grid();
 
 		/// Adds spring forces between particles to reduce clumping. \ref _space_hash must have been filled before
-		/// this is called. This is taken from https://github.com/nepluno/apic2d.
-		void _add_spring_forces(double dt, std::size_t step, std::size_t substep);
+		/// this is called. This is taken from "Preserving Fluid Sheets with Adaptively Sampled Anisotropic
+		/// Particles". This function computes \ref particle::grid_index but does not update \ref _space_hash.
+		void _correct_positions(double dt);
+
+		/// Updates all fluid sources.
+		void _update_sources();
 	};
 }

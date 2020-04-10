@@ -77,9 +77,13 @@ namespace fluid {
 			_occupied_cells.clear();
 		}
 
+		/// Calls the given callback for all objects in the given cell.
+		template <typename Callback> void for_all_objects_in(vec3s cell, Callback &cb) {
+			_for_all_objects_in_cell(_table(cell), cb);
+		}
 		/// Calls the given callback function for all objects near the given cell.
 		template <typename Callback> void for_all_nearby_objects(
-			vec3s cell, vec3s min_offset, vec3s max_offset, const Callback &cb
+			vec3s cell, vec3s min_offset, vec3s max_offset, Callback &cb
 		) {
 			vec3s min_corner, max_corner;
 			vec_ops::apply_to(
@@ -91,20 +95,15 @@ namespace fluid {
 			vec_ops::apply_to(
 				max_corner, [](std::size_t center, std::size_t offset, std::size_t max) {
 					return std::min(center + offset, max);
-				}, cell, max_offset, _table.get_size()
+				},
+				cell, max_offset, _table.get_size()
 					);
-			for (std::size_t z = min_corner.z; z < max_corner.z; ++z) {
-				for (std::size_t y = min_corner.y; y < max_corner.y; ++y) {
-					for (std::size_t x = min_corner.x; x < max_corner.x; ++x) {
-						_cell &cell = _table(x, y, z);
-						for (std::size_t i = 0, id = cell.head; i < cell.count; ++i) {
-							_chain_elem &elem = _chain[id];
-							cb(elem.object);
-							id = elem.next;
-						}
-					}
-				}
-			}
+			_table.for_each_in_range(
+				[this, &cb](vec3s, _cell &cell) {
+					_for_all_objects_in_cell(cell, cb);
+				},
+				min_corner, max_corner
+					);
 		}
 
 		/// Sorts and returns all fluid cells. This function will always sort the cells.
@@ -140,5 +139,14 @@ namespace fluid {
 		_grid_type _table; ///< The hash table.
 		std::vector<_chain_elem> _chain; ///< The linked list.
 		std::vector<std::size_t> _occupied_cells; ///< Stores all cells that contain objects.
+
+		/// Calls the given callback for all objects in the given cell.
+		template <typename Callback> void _for_all_objects_in_cell(const _cell &cell, Callback &cb) {
+			for (std::size_t i = 0, id = cell.head; i < cell.count; ++i) {
+				_chain_elem &elem = _chain[id];
+				cb(elem.object);
+				id = elem.next;
+			}
+		}
 	};
 }
