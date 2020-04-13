@@ -5,10 +5,13 @@
 
 #include <maya/MStatus.h>
 
+#define FLUID_MAYA_STR(X) #X
+#define FLUID_MAYA_STR_EXPAND(X) FLUID_MAYA_STR(X)
+
 /// Checks the given \p MStatus. The given object must be a variable name.
-#define FLUID_MAYA_CHECK(MSTAT, MSG)              \
-	if (!::fluid::maya::maya_check(MSTAT, MSG)) { \
-		return MSTAT;                             \
+#define FLUID_MAYA_CHECK(MSTAT, MSG)                                                                 \
+	if (!::fluid::maya::maya_check(MSTAT, __FILE__ ":" FLUID_MAYA_STR_EXPAND(__LINE__) " - " MSG)) { \
+		return MSTAT;                                                                                \
 	}
 /// Checks the return value of the given function call which must be a \p MStatus.
 #define FLUID_MAYA_CHECK_RETURN(FUNC_CALL, MSG) \

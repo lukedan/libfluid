@@ -116,10 +116,10 @@ namespace fluid {
 		std::size_t index_to_raw(size_type i) const {
 			// hopefully the compiler will optimize away this empty check in the release build
 			vec_ops::for_each(
-				[](std::size_t coord) {
+				[](std::size_t coord, std::size_t size) {
 					assert(coord < size);
 				},
-				i
+				i, _size
 					);
 			return vec_ops::dot(i, _layer_offset);
 		}

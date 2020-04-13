@@ -196,19 +196,12 @@ namespace fluid::maya {
 			}
 		}
 		{ // indices
-			std::size_t num_faces = static_cast<std::size_t>(input_mesh.numPolygons(&stat));
-			FLUID_MAYA_CHECK(stat, "retrieve mesh");
-			vox_mesh.indices.reserve(num_faces * 3);
-			MIntArray arr;
-			for (std::size_t i = 0; i < num_faces; ++i) {
-				FLUID_MAYA_CHECK_RETURN(input_mesh.getPolygonVertices(static_cast<int>(i), arr), "retrieve mesh");
-				if (arr.length() != 3) {
-					stat.perror("non-triangle face encountered");
-					continue;
-				}
-				vox_mesh.indices.emplace_back(arr[0]);
-				vox_mesh.indices.emplace_back(arr[1]);
-				vox_mesh.indices.emplace_back(arr[2]);
+			MIntArray tri_counts, tri_ids;
+			FLUID_MAYA_CHECK_RETURN(input_mesh.getTriangles(tri_counts, tri_ids), "retrieve mesh");
+			std::size_t vert_count = static_cast<std::size_t>(tri_ids.length());
+			vox_mesh.indices.resize(vert_count);
+			for (std::size_t i = 0; i < vert_count; ++i) {
+				vox_mesh.indices[i] = tri_ids[static_cast<unsigned int>(i)];
 			}
 		}
 

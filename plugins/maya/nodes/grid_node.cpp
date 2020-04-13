@@ -144,10 +144,10 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_gravity), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_transfer_method), "parameter registration");
 		// source
-		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_cells), "parameter registration");
+		/*FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_cells), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_velocity), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_enabled), "parameter registration");
-		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_coerce_velocity), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_coerce_velocity), "parameter registration");*/
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_sources), "parameter registration");
 		// output
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_particle_positions), "parameter registration");
@@ -240,38 +240,44 @@ namespace fluid::maya {
 			// sources
 			unsigned int source_count = sources_data.elementCount(&stat);
 			FLUID_MAYA_CHECK(stat, "retrieve attribute");
-			for (unsigned int i = 0; i < source_count; ++i) {
-				MDataHandle single_source_data = sources_data.inputValue(&stat);
-				FLUID_MAYA_CHECK(stat, "retrieve attribute");
-
-				MDataHandle source_cells_data = single_source_data.child(attr_source_cells);
-				MFnIntArrayData source_cells(source_cells_data.data(), &stat);
-				FLUID_MAYA_CHECK(stat, "retrieve attribute");
-				const double3 &source_velocity = single_source_data.child(attr_source_velocity).asDouble3();
-				bool
-					source_enabled = single_source_data.child(attr_source_enabled).asBool(),
-					source_coerce_velocity = single_source_data.child(attr_source_coerce_velocity).asBool();
-				int source_seeding_density = single_source_data.child(attr_source_seeding_density).asInt();
-
-				auto source = std::make_unique<fluid::source>();
-				source->active = source_enabled;
-				{ // cells
-					unsigned int num_cells = source_cells.length(&stat) / 3;
+			if (source_count > 0) {
+				for (unsigned int i = 0; ; ) {
+					MDataHandle single_source_data = sources_data.inputValue(&stat);
 					FLUID_MAYA_CHECK(stat, "retrieve attribute");
-					source->cells.resize(static_cast<std::size_t>(num_cells));
-					unsigned int int_index = 0;
-					for (vec3s &cell_index : source->cells) {
-						cell_index.x = static_cast<std::size_t>(source_cells[int_index++]);
-						cell_index.y = static_cast<std::size_t>(source_cells[int_index++]);
-						cell_index.z = static_cast<std::size_t>(source_cells[int_index++]);
-					}
-				}
-				source->coerce_velocity = source_coerce_velocity;
-				source->target_density_cubic_root = source_seeding_density;
-				source->velocity = vec3d(source_velocity[0], source_velocity[1], source_velocity[2]);
-				sim.sources.emplace_back(std::move(source));
 
-				FLUID_MAYA_CHECK_RETURN(sources_data.next(), "retrieve attribute");
+					MDataHandle source_cells_data = single_source_data.child(attr_source_cells);
+					MFnIntArrayData source_cells(source_cells_data.data(), &stat);
+					FLUID_MAYA_CHECK(stat, "retrieve attribute");
+					const double3 &source_velocity = single_source_data.child(attr_source_velocity).asDouble3();
+					bool
+						source_enabled = single_source_data.child(attr_source_enabled).asBool(),
+						source_coerce_velocity = single_source_data.child(attr_source_coerce_velocity).asBool();
+					int source_seeding_density = single_source_data.child(attr_source_seeding_density).asInt();
+
+					auto source = std::make_unique<fluid::source>();
+					source->active = source_enabled;
+					{ // cells
+						unsigned int num_cells = source_cells.length(&stat) / 3;
+						FLUID_MAYA_CHECK(stat, "retrieve attribute");
+						source->cells.resize(static_cast<std::size_t>(num_cells));
+						unsigned int int_index = 0;
+						for (vec3s &cell_index : source->cells) {
+							cell_index.x = static_cast<std::size_t>(source_cells[int_index++]);
+							cell_index.y = static_cast<std::size_t>(source_cells[int_index++]);
+							cell_index.z = static_cast<std::size_t>(source_cells[int_index++]);
+						}
+					}
+					source->coerce_velocity = source_coerce_velocity;
+					source->target_density_cubic_root = source_seeding_density;
+					source->velocity = vec3d(source_velocity[0], source_velocity[1], source_velocity[2]);
+					sim.sources.emplace_back(std::move(source));
+
+					// MArrayDataHandle::next() returns kFailure when there's no next element
+					if (++i >= source_count) {
+						break;
+					}
+					FLUID_MAYA_CHECK_RETURN(sources_data.next(), "retrieve attribute");
+				}
 			}
 
 			if (_particle_cache.size() > 0) {

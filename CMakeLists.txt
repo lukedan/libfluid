@@ -69,11 +69,12 @@ if(FLUID_BUILD_MAYA_PLUGIN)
 		PRIVATE cxx_std_17)
 	target_sources(fluid_maya
 		PRIVATE
+			"plugins/maya/commands/create_simulation_grid.cpp"
 			"plugins/maya/nodes/grid_node.cpp"
 			"plugins/maya/nodes/mesher_node.cpp"
 			"plugins/maya/nodes/point_cloud_loader_node.cpp"
 			"plugins/maya/nodes/voxelizer_node.cpp"
-			"plugins/maya/main.cpp")
+			"plugins/maya/main.cpp" "plugins/maya/commands/add_fluid_source.cpp")
 
 	target_include_directories(fluid_maya
 		PRIVATE

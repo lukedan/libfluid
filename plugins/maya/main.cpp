@@ -4,12 +4,16 @@
 #include <maya/MStatus.h>
 #include <maya/MObject.h>
 #include <maya/MFnPlugin.h>
+#include <maya/MStringArray.h>
+#include <maya/MGlobal.h>
 
 #include "misc.h"
 #include "nodes/grid_node.h"
 #include "nodes/mesher_node.h"
 #include "nodes/point_cloud_loader_node.h"
 #include "nodes/voxelizer_node.h"
+#include "commands/create_simulation_grid.h"
+#include "commands/add_fluid_source.h"
 
 namespace fluid::maya {
 	MTypeId
@@ -17,13 +21,24 @@ namespace fluid::maya {
 		mesher_node::id{ 0x98765433 },
 		point_cloud_loader_node::id{ 0x98765434 },
 		voxelizer_node::id{ 0x98765435 };
+
+	const MString
+		create_simulation_grid_command::name{ "fluidCreateSimulationGrid" },
+		add_fluid_source_command::name{ "fluidAddFluidSource" };
 }
+
+const MString top_level_menu_name{ "libfluid" };
+const MString create_simulation_grid_menu_name{ "Create Simulation Grid" };
+const MString add_fluid_source_menu_name{ "Add as Fluid Source" };
+
+MStringArray create_simulation_grid_menu;
+MStringArray add_fluid_source_menu;
 
 /// Initializes the plugin.
 MStatus initializePlugin(MObject obj) {
-	MStatus status = MStatus::kSuccess;
-	MFnPlugin plugin(obj, "Xuanyi Zhou", "0.1", "Any", &status);
-	FLUID_MAYA_CHECK(status, "plugin creation");
+	MStatus stat = MStatus::kSuccess;
+	MFnPlugin plugin(obj, "Xuanyi Zhou", "0.1", "Any", &stat);
+	FLUID_MAYA_CHECK(stat, "plugin creation");
 
 	FLUID_MAYA_CHECK_RETURN(
 		plugin.registerNode(
@@ -54,6 +69,42 @@ MStatus initializePlugin(MObject obj) {
 		"node registration"
 	);
 
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.registerCommand(
+			fluid::maya::create_simulation_grid_command::name,
+			fluid::maya::create_simulation_grid_command::creator
+		),
+		"command registration"
+	);
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.registerCommand(
+			fluid::maya::add_fluid_source_command::name,
+			fluid::maya::add_fluid_source_command::creator
+		),
+		"command registration"
+	);
+
+
+	MString top_level_menu_path;
+	FLUID_MAYA_CHECK_RETURN(
+		MGlobal::executeCommand("menu -parent MayaWindow -label " + top_level_menu_name + ";", top_level_menu_path),
+		"top level menu registration"
+	);
+
+	create_simulation_grid_menu = plugin.addMenuItem(
+		create_simulation_grid_menu_name, top_level_menu_path,
+		fluid::maya::create_simulation_grid_command::name, "",
+		false, nullptr, &stat
+	);
+	FLUID_MAYA_CHECK(stat, "menu item registration");
+
+	add_fluid_source_menu = plugin.addMenuItem(
+		add_fluid_source_menu_name, top_level_menu_path,
+		fluid::maya::add_fluid_source_command::name, "",
+		false, nullptr, &stat
+	);
+	FLUID_MAYA_CHECK(stat, "menu item registration");
+
 	return MStatus::kSuccess;
 }
 
@@ -65,6 +116,16 @@ MStatus uninitializePlugin(MObject obj) {
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::point_cloud_loader_node::id), "node deregisteration");
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::grid_node::id), "node deregistration");
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::voxelizer_node::id), "node deregistration");
+
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.deregisterCommand(fluid::maya::create_simulation_grid_command::name), "command deregisteration"
+	);
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.deregisterCommand(fluid::maya::add_fluid_source_command::name), "command deregisteration"
+	);
+
+	FLUID_MAYA_CHECK_RETURN(plugin.removeMenuItem(create_simulation_grid_menu), "menu item deregistration");
+	FLUID_MAYA_CHECK_RETURN(plugin.removeMenuItem(add_fluid_source_menu), "menu item deregistration");
 
 	return MStatus::kSuccess;
 }
