@@ -12,14 +12,25 @@
 
 #include "misc.h"
 #include "fluid_grid.h"
-#include "data_structures/particle.h"
 #include "data_structures/space_hashing.h"
 #include "data_structures/source.h"
+#include "data_structures/grid.h"
 
 namespace fluid {
 	/// A fluid simulation.
 	class simulation {
 	public:
+		/// A particle.
+		struct particle {
+			vec3d
+				position, ///< The position of this particle.
+				velocity, ///< The velocity of this particle.
+				cx, ///< The c vector used in APIC.
+				cy, ///< The c vector used in APIC.
+				cz; ///< The c vector used in APIC.
+			vec3s grid_index; ///< The index of this particle in the grid.
+			std::size_t raw_grid_index = 0; ///< Raw version of \ref grid_index.
+		};
 		/// The simulation method.
 		enum class method : unsigned char {
 			pic, ///< PIC.
@@ -46,8 +57,8 @@ namespace fluid {
 		void hash_particles();
 
 		/// Seeds the given cell so that it has at lest the given number of particles. \ref _space_hash and
-		/// \ref particle::grid_index must be valid for this function to be effective. This function also updates
-		/// those data accordingly.
+		/// \ref particle::grid_index must be valid for this function to be effective. This function updates
+		/// \ref _cell_particles::count but does **not** insert the particles at the right position.
 		void seed_cell(vec3s cell, vec3d velocity, std::size_t density = default_seeding_density);
 
 		/// Seeds the given region using the given predicate that indicates whether a point is inside the region to
@@ -105,12 +116,12 @@ namespace fluid {
 		[[nodiscard]] const fluid_grid &grid() const {
 			return _grid;
 		}
-		/// Returns the list of particles.
-		[[nodiscard]] std::deque<particle> &particles() {
+		/// Returns the list of particles. Do not store references to these particles.
+		[[nodiscard]] std::vector<particle> &particles() {
 			return _particles;
 		}
 		/// \overload
-		[[nodiscard]] const std::deque<particle> &particles() const {
+		[[nodiscard]] const std::vector<particle> &particles() const {
 			return _particles;
 		}
 
@@ -155,14 +166,38 @@ namespace fluid {
 			correction_stiffness = 5.0; ///< The stiffness used when correcting particle positions.
 		method simulation_method = method::apic; ///< The simulation method.
 	private:
-		std::deque<particle> _particles; ///< All particles.
+		/// Information about all particles in a cell.
+		struct _cell_particles {
+			std::size_t
+				begin = 0, ///< Index of the first particle.
+				count = 0; ///< The number of particles.
+		};
+
+		std::vector<particle> _particles; ///< All particles.
 		fluid_grid
 			_grid, ///< The grid.
 			_old_grid; ///< Grid that stores old velocities used for FLIP.
 
-		/// Space hashing. This is valid after each time step, or you can call \ref hash_particles() to manually
-		/// update this.
-		space_hashing<3, particle*> _space_hash;
+		/// Space hashing. This is computed by \ref hash_particles(). The way this is computed is that all particles
+		/// are sorted according to \ref particle::raw_grid_index, then particles in each cell are recorded in this
+		/// grid.
+		grid3<_cell_particles> _space_hash;
+		/// Cells that contain fluid particles. This is computed by \ref hash_particles().
+		std::vector<std::size_t> _fluid_cells;
+
+		/// Calls the callback function for all particles in the specified region.
+		template <typename Cb> void _for_all_nearby_particles(
+			vec3s center, vec3s diffmin, vec3s diffmax, Cb &callback
+		) {
+			_space_hash.for_each_in_range_checked(
+				[this, &callback](vec3s, const _cell_particles &cell) {
+					for (std::size_t c = cell.begin, i = 0; i < cell.count; ++c, ++i) {
+						callback(_particles[c]);
+					}
+				},
+				center, diffmin, diffmax
+					);
+		}
 
 		/// Returns the velocities of the negative direction faces of the given cell.
 		[[nodiscard]] static vec3d _get_negative_face_velocities(const fluid_grid&, vec3s);

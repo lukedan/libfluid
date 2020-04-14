@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "math/vec.h"
-#include "data_structures/particle.h"
 #include "data_structures/grid.h"
 #include "data_structures/space_hashing.h"
 #include "data_structures/mesh.h"

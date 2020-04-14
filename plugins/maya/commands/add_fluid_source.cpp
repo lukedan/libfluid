@@ -20,7 +20,7 @@ namespace fluid::maya {
 	MStatus add_fluid_source_command::doIt(const MArgList &args) {
 		MStatus stat;
 
-		// TODO get selected grid and geometry
+		// get selected grid and geometry
 		MSelectionList selection;
 		FLUID_MAYA_CHECK_RETURN(MGlobal::getActiveSelectionList(selection), "retrieve selection");
 		MObject grid = MObject::kNullObj;

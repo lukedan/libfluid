@@ -30,6 +30,9 @@ target_sources(fluid
 		"src/simulation.cpp"
 		"src/data_structures/point_cloud.cpp"
 		"src/voxelizer.cpp")
+if(MSVC)
+	target_compile_options(fluid PUBLIC /arch:AVX2)
+endif()
 if(FLUID_IPO_SUPPORTED)
 	set_property(TARGET fluid PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()

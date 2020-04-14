@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "grid.h"
-#include "particle.h"
 
 namespace fluid {
 	/// A space-hashing data structure. Each grid stores particles in that grid.
@@ -25,7 +24,6 @@ namespace fluid {
 		void resize(size_type size) {
 			_table = _grid_type(size);
 			_chain.clear();
-			_occupied_cells.clear();
 		}
 
 		/// Adds an object to the grid. The object must not be moved in memory after it has been added until
@@ -56,9 +54,6 @@ namespace fluid {
 		/// \ref add_object_at() that takes a raw index.
 		void add_object_at_raw(std::size_t index_raw, T obj) {
 			_cell &cell = _table[index_raw];
-			if (cell.count == 0) {
-				_occupied_cells.emplace_back(index_raw);
-			}
 			std::size_t new_head = _chain.size();
 			_chain.emplace_back(std::move(obj), cell.head);
 			cell.head = new_head;
@@ -74,7 +69,6 @@ namespace fluid {
 		void clear() {
 			_table.fill(_cell());
 			_chain.clear();
-			_occupied_cells.clear();
 		}
 
 		/// Calls the given callback for all objects in the given cell.
@@ -85,36 +79,12 @@ namespace fluid {
 		template <typename Callback> void for_all_nearby_objects(
 			vec3s cell, vec3s min_offset, vec3s max_offset, Callback &cb
 		) {
-			vec3s min_corner, max_corner;
-			vec_ops::apply_to(
-				min_corner, [](std::size_t center, std::size_t offset) {
-					return center < offset ? 0 : center - offset;
-				}, cell, min_offset
-			);
-			max_offset += vec3s(1, 1, 1);
-			vec_ops::apply_to(
-				max_corner, [](std::size_t center, std::size_t offset, std::size_t max) {
-					return std::min(center + offset, max);
-				},
-				cell, max_offset, _table.get_size()
-					);
-			_table.for_each_in_range(
+			_table.for_each_in_range_checked(
 				[this, &cb](vec3s, _cell &cell) {
 					_for_all_objects_in_cell(cell, cb);
 				},
-				min_corner, max_corner
+				cell, min_offset, max_offset
 					);
-		}
-
-		/// Sorts and returns all fluid cells. This function will always sort the cells.
-		std::vector<vec3s> get_sorted_occupied_cells() {
-			std::sort(_occupied_cells.begin(), _occupied_cells.end());
-			std::vector<vec3s> result;
-			result.reserve(_occupied_cells.size());
-			for (std::size_t sz : _occupied_cells) {
-				result.emplace_back(_table.index_from_raw(sz));
-			}
-			return result;
 		}
 	private:
 		/// The contents of a grid cell.
@@ -138,7 +108,6 @@ namespace fluid {
 
 		_grid_type _table; ///< The hash table.
 		std::vector<_chain_elem> _chain; ///< The linked list.
-		std::vector<std::size_t> _occupied_cells; ///< Stores all cells that contain objects.
 
 		/// Calls the given callback for all objects in the given cell.
 		template <typename Callback> void _for_all_objects_in_cell(const _cell &cell, Callback &cb) {

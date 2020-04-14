@@ -30,7 +30,7 @@ vec3d sim_grid_offset;
 vec3s sim_grid_size(50, 50, 50);
 double sim_cell_size = 1.0;
 std::mutex sim_particles_lock;
-std::vector<fluid::particle> sim_particles;
+std::vector<fluid::simulation::particle> sim_particles;
 fluid::grid3<std::size_t> sim_grid_occupation;
 fluid::grid3<vec3d> sim_grid_velocities;
 bool sim_mesh_valid = false;
@@ -39,10 +39,10 @@ fluid::semaphore sim_mesher_sema;
 
 void update_simulation(const fluid::simulation &sim) {
 	// collect particles
-	std::vector<fluid::particle> new_particles(sim.particles().begin(), sim.particles().end());
+	std::vector<fluid::simulation::particle> new_particles(sim.particles().begin(), sim.particles().end());
 
 	double energy = 0.0;
-	for (fluid::particle &p : new_particles) {
+	for (fluid::simulation::particle &p : new_particles) {
 		energy += 0.5 * p.velocity.squared_length();
 		energy -= fluid::vec_ops::dot(sim.gravity, p.position);
 	}
@@ -102,7 +102,7 @@ void simulation_thread() {
 	};
 	sim.post_grid_to_particle_transfer_callback = [&sim](double) {
 		double maxv = 0.0;
-		for (const fluid::particle &p : sim.particles()) {
+		for (const fluid::simulation::particle &p : sim.particles()) {
 			maxv = std::max(maxv, p.velocity.squared_length());
 		}
 		std::cout << "    max particle velocity = " << std::sqrt(maxv) << "\n";
@@ -134,16 +134,16 @@ void simulation_thread() {
 		}
 
 		source->velocity = vec3d(0.0, 0.0, 0.0);
-		/*sim.sources.emplace_back(std::move(source));*/
+		sim.sources.emplace_back(std::move(source));
 	}
 
 	{
-		sim.grid().grid().for_each_in_range(
+		/*sim.grid().grid().for_each_in_range(
 			[](vec3s, fluid::fluid_grid::cell &cell) {
 				cell.cell_type = fluid::fluid_grid::cell::type::solid;
 			},
 			vec3s(20, 0, 20), vec3s(30, 10, 30)
-				);
+				);*/
 	}
 
 	while (true) {
@@ -151,7 +151,7 @@ void simulation_thread() {
 			sim.particles().clear();
 
 			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
-			sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));
+			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
 			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
 			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);*/
 			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);*/
@@ -192,7 +192,7 @@ void mesher_thread() {
 			if (sim_mesh_valid) {
 				continue;
 			}
-			for (const fluid::particle &p : sim_particles) {
+			for (const fluid::simulation::particle &p : sim_particles) {
 				particles.emplace_back(p.position);
 			}
 			sim_mesh_valid = true;
@@ -294,7 +294,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 				std::vector<vec3d> points;
 				{
 					std::lock_guard<std::mutex> guard(sim_particles_lock);
-					for (const fluid::particle &p : sim_particles) {
+					for (const fluid::simulation::particle &p : sim_particles) {
 						points.emplace_back(p.position);
 					}
 				}
@@ -359,8 +359,8 @@ int main() {
 	resize_callback(window, width, height);
 
 	std::thread sim_thread(simulation_thread);
-	std::thread mesh_thread(mesher_thread);
 	sim_thread.detach();
+	std::thread mesh_thread(mesher_thread);
 	mesh_thread.detach();
 
 	while (!glfwWindowShouldClose(window)) {
@@ -521,12 +521,12 @@ int main() {
 				std::lock_guard<std::mutex> guard(sim_particles_lock);
 
 				double max_vel = 0.0;
-				for (fluid::particle &p : sim_particles) {
+				for (fluid::simulation::particle &p : sim_particles) {
 					max_vel = std::max(max_vel, p.velocity.squared_length());
 				}
 				max_vel = std::sqrt(max_vel);
 
-				for (fluid::particle &p : sim_particles) {
+				for (fluid::simulation::particle &p : sim_particles) {
 					vec3d pos = p.position;
 					switch (particle_vis) {
 					case particle_visualize_mode::none:
@@ -566,7 +566,7 @@ int main() {
 			glBegin(GL_LINES);
 			{
 				std::lock_guard<std::mutex> guard(sim_particles_lock);
-				for (fluid::particle &p : sim_particles) {
+				for (fluid::simulation::particle &p : sim_particles) {
 					double mul = 0.01;
 					vec3d
 						pos = p.position,

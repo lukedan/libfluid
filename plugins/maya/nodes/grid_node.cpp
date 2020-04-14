@@ -87,8 +87,9 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(source_cells.setDisconnectBehavior(MFnAttribute::kDelete), "parameter creation");
 
 		MFnNumericAttribute source_velocity;
+		// here using k3Double causes the edit boxes to not show up
 		attr_source_velocity = source_velocity.create(
-			"sourceVelocity", "svel", MFnNumericData::k3Double, 0.0, &stat
+			"sourceVelocity", "svel", MFnNumericData::k3Float, 0.0, &stat
 		);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 		FLUID_MAYA_CHECK_RETURN(source_velocity.setDisconnectBehavior(MFnAttribute::kDelete), "parameter creation");
@@ -144,10 +145,6 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_gravity), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_transfer_method), "parameter registration");
 		// source
-		/*FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_cells), "parameter registration");
-		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_velocity), "parameter registration");
-		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_enabled), "parameter registration");
-		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_source_coerce_velocity), "parameter registration");*/
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_sources), "parameter registration");
 		// output
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_particle_positions), "parameter registration");

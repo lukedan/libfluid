@@ -103,13 +103,35 @@ namespace fluid {
 
 		/// Executes the given callback for each cell in the grid. The order in which the cells are visited is the
 		/// same as the order in which they're stored in memory.
-		template <typename Callback> void for_each(Callback &cb) {
-			_for_each_impl_wrapper(cb, size_type(), _size, std::make_index_sequence<Dim>());
+		template <typename Callback> void for_each(Callback &&cb) {
+			_for_each_impl_wrapper(std::forward<Callback>(cb), size_type(), _size, std::make_index_sequence<Dim>());
 		}
 		/// Executes the given callback for the given range of the grid. The order in which the cells are visited is
-		/// as close to the order in which they're stored in memory as possible.
-		template <typename Callback> void for_each_in_range(Callback &cb, size_type min, size_type max) {
-			_for_each_impl_wrapper(cb, min, max, std::make_index_sequence<Dim>());
+		/// as close to the order in which they're stored in memory as possible. The range must completely lie inside
+		/// the grid.
+		template <typename Callback> void for_each_in_range_unchecked(Callback &&cb, size_type min, size_type max) {
+			_for_each_impl_wrapper(std::forward<Callback>(cb), min, max, std::make_index_sequence<Dim>());
+		}
+		/// Executes the given callback for the given range of the grid.
+		template <typename Callback> void for_each_in_range_checked(Callback &&cb, size_type min, size_type max) {
+			vec_ops::for_each(
+				[](std::size_t &coord, std::size_t max) {
+					coord = std::min(coord, max);
+				},
+				max, _size
+					);
+			for_each_in_range_unchecked(std::forward<Callback>(cb), min, max);
+		}
+		/// Executes the given callback for the given range of the grid.
+		template <typename Callback> void for_each_in_range_checked(
+			Callback &&cb, size_type center, size_type diffmin, size_type diffmax
+		) {
+			size_type min_corner = vec_ops::apply<size_type>(
+				[](std::size_t center, std::size_t offset) {
+					return center < offset ? 0 : center - offset;
+				}, center, diffmin
+			);
+			for_each_in_range_checked(std::forward<Callback>(cb), min_corner, center + diffmax + vec3s(1, 1, 1));
 		}
 
 		/// Converts a (x, y, z) position into a raw index for \ref _cells.

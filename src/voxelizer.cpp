@@ -109,12 +109,12 @@ namespace fluid {
 	}
 
 	void voxelizer::voxelize_triangle(vec3d p1, vec3d p2, vec3d p3) {
-		vec3d min, max;
-		_update_bounding_box(p1, min, max);
+		vec3d min = p1, max = p1;
 		_update_bounding_box(p2, min, max);
 		_update_bounding_box(p3, min, max);
 
-		vec3d half_extents = vec3d(cell_size, cell_size, cell_size) * 0.5;
+		double half_cell_size = 0.5 * cell_size;
+		vec3d half_extents = vec3d(half_cell_size, half_cell_size, half_cell_size);
 
 		// here we assume the indices are in range
 		// otherwise converting a negative float to unsigned is undefined behavior
@@ -156,7 +156,7 @@ namespace fluid {
 			}
 		};
 
-		while (stack.empty()) {
+		while (!stack.empty()) {
 			vec3s cur = stack.top();
 			stack.pop();
 
