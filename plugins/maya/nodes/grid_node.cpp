@@ -245,7 +245,7 @@ namespace fluid::maya {
 					MDataHandle source_cells_data = single_source_data.child(attr_source_cells);
 					MFnIntArrayData source_cells(source_cells_data.data(), &stat);
 					FLUID_MAYA_CHECK(stat, "retrieve attribute");
-					const double3 &source_velocity = single_source_data.child(attr_source_velocity).asDouble3();
+					const float3 &source_velocity = single_source_data.child(attr_source_velocity).asFloat3();
 					bool
 						source_enabled = single_source_data.child(attr_source_enabled).asBool(),
 						source_coerce_velocity = single_source_data.child(attr_source_coerce_velocity).asBool();
@@ -287,7 +287,7 @@ namespace fluid::maya {
 				sim.update(frame_time);
 				MPointArray &array = _particle_cache.emplace_back(static_cast<unsigned int>(sim.particles().size()));
 				std::size_t i = 0;
-				for (const particle &p : sim.particles()) {
+				for (const simulation::particle &p : sim.particles()) {
 					array.set(static_cast<unsigned int>(i), p.position.x, p.position.y, p.position.z);
 					++i;
 				}

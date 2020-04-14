@@ -9,7 +9,7 @@
 #include <maya/MPxNode.h>
 #include <maya/MPointArray.h>
 
-#include <fluid/data_structures/particle.h>
+#include <fluid/simulation.h>
 
 namespace fluid::maya {
 	/// A node that represents the simulation grid.
@@ -47,6 +47,6 @@ namespace fluid::maya {
 	private:
 		// deque to reduce move operations
 		std::deque<MPointArray> _particle_cache; ///< Cached particle positions for each frame.
-		std::deque<fluid::particle> _last_frame_particles; ///< Saved particles from the last cached frame.
+		std::vector<simulation::particle> _last_frame_particles; ///< Saved particles from the last cached frame.
 	};
 }

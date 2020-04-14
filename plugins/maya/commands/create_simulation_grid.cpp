@@ -77,7 +77,7 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK(stat, "mesh creation");
 		MFnDagNode fn_shape(shape, &stat);
 		FLUID_MAYA_CHECK(stat, "mesh creation");
-		MPlug mesh_input = fn_shape.findPlug("inMesh", &stat);
+		MPlug mesh_input = fn_shape.findPlug("inMesh", false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
 		FLUID_MAYA_CHECK_RETURN(_graph_modifier.connect(mesher_output, mesh_input), "attribute connection");
 

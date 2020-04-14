@@ -120,20 +120,21 @@ void simulation_thread() {
 		}
 		source->coerce_velocity = true;*/
 
-		for (std::size_t x = 20; x < 30; ++x) {
-			for (std::size_t y = 35; y < 36; ++y) {
+		for (std::size_t x = 5; x < 7; ++x) {
+			for (std::size_t y = 30; y < 40; ++y) {
 				for (std::size_t z = 20; z < 30; ++z) {
 					int ix = x, iz = z;
 					ix -= 25;
 					iz -= 25;
-					if (ix * ix + iz * iz < 25) {
+					/*if (ix * ix + iz * iz < 25) {*/
 						source->cells.emplace_back(x, y, z);
-					}
+					/*}*/
 				}
 			}
 		}
 
-		source->velocity = vec3d(0.0, 0.0, 0.0);
+		source->velocity = vec3d(100.0, 0.0, 0.0);
+		source->coerce_velocity = true;
 		sim.sources.emplace_back(std::move(source));
 	}
 
