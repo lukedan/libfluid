@@ -66,7 +66,7 @@ namespace fluid::maya {
 
 		MFnDependencyNode fn_grid(grid, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
-		MPlug source_cells_plug = fn_grid.findPlug(grid_node::attr_source_cells, false, &stat);
+		MPlug sources_plug = fn_grid.findPlug(grid_node::attr_sources, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
 		MPlug ref_cell_size_plug = fn_grid.findPlug(grid_node::attr_cell_size, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
@@ -74,6 +74,9 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
 		MPlug ref_grid_size_plug = fn_grid.findPlug(grid_node::attr_grid_size, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
+
+		unsigned int num_sources = sources_plug.numElements(&stat);
+		FLUID_MAYA_CHECK(stat, "attribute connection");
 
 		for (MPlug &mesh_plug : mesh_plugs) {
 			MObject voxelizer = _graph_modifier.createNode(voxelizer_node::id, &stat);
@@ -108,9 +111,14 @@ namespace fluid::maya {
 			);
 
 			// voxelizer -> grid
+			MPlug source_element = sources_plug.elementByLogicalIndex(num_sources, &stat);
+			FLUID_MAYA_CHECK(stat, "attribute connection");
+			source_element = source_element.child(grid_node::attr_source_cells, &stat);
+			FLUID_MAYA_CHECK(stat, "attribute connection");
 			FLUID_MAYA_CHECK_RETURN(
-				_graph_modifier.connect(vox_cells_plug, source_cells_plug), "attribute connection"
+				_graph_modifier.connect(vox_cells_plug, source_element), "attribute connection"
 			);
+			++num_sources;
 		}
 
 		FLUID_MAYA_CHECK_RETURN(_graph_modifier.doIt(), "execute queued operations");
