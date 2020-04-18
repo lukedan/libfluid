@@ -6,7 +6,7 @@
 #include <tuple>
 
 #include "math/vec.h"
-#include "fluid_grid.h"
+#include "mac_grid.h"
 #include "simulation.h"
 
 namespace fluid {

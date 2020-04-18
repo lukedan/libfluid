@@ -8,8 +8,8 @@
 namespace fluid {
 	class pressure_solver;
 
-	/// Stores the simuation grid.
-	class fluid_grid {
+	/// Stores a marker-and-cell (MAC) grid.
+	class mac_grid {
 	public:
 		/// A cell in the simulation grid.
 		struct cell {
@@ -40,9 +40,9 @@ namespace fluid {
 		};
 
 		/// Default constructor.
-		fluid_grid() = default;
+		mac_grid() = default;
 		/// Initializes the grid.
-		explicit fluid_grid(vec3s grid_count);
+		explicit mac_grid(vec3s grid_count);
 
 		/// Returns the velocities around the given position. Velocities of cells that are out of the grid have their
 		/// corresponding coordinates clamped to zero.
@@ -50,15 +50,15 @@ namespace fluid {
 
 		/// Returns the cell at the given index, or \p nullptr if the cell is out of bounds. Note that since unsigned
 		/// overflow is well defined, "negative" coordinates works fine.
-		[[nodiscard]] fluid_grid::cell *get_cell(vec3s);
+		[[nodiscard]] mac_grid::cell *get_cell(vec3s);
 		/// \overload
-		[[nodiscard]] const fluid_grid::cell *get_cell(vec3s) const;
+		[[nodiscard]] const mac_grid::cell *get_cell(vec3s) const;
 
 		/// Returns the cell and its type at the given index. For cells that are outside of the simulation grid, this
 		/// function returns \ref fluid_grid::cell::type::solid.
-		[[nodiscard]] std::pair<fluid_grid::cell*, fluid_grid::cell::type> get_cell_and_type(vec3s);
+		[[nodiscard]] std::pair<mac_grid::cell*, mac_grid::cell::type> get_cell_and_type(vec3s);
 		/// \overload
-		[[nodiscard]] std::pair<const fluid_grid::cell*, fluid_grid::cell::type> get_cell_and_type(vec3s) const;
+		[[nodiscard]] std::pair<const mac_grid::cell*, mac_grid::cell::type> get_cell_and_type(vec3s) const;
 
 		/// Returns the simulation grid.
 		[[nodiscard]] grid3<cell> &grid() {

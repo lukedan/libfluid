@@ -24,11 +24,12 @@ target_include_directories(fluid
 		include/)
 target_sources(fluid
 	PRIVATE
-		"src/fluid_grid.cpp"
+		"src/data_structures/point_cloud.cpp"
+		"src/data_structures/obstacle.cpp"
+		"src/mac_grid.cpp"
 		"src/mesher.cpp"
 		"src/pressure_solver.cpp"
 		"src/simulation.cpp"
-		"src/data_structures/point_cloud.cpp"
 		"src/voxelizer.cpp")
 if(MSVC)
 	target_compile_options(fluid PUBLIC /arch:AVX2)

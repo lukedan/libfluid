@@ -8,6 +8,7 @@
 #include "math/vec.h"
 
 namespace fluid {
+	/// A fluid source.
 	class source {
 	public:
 		std::vector<vec3s> cells; ///< The cells where fluid particles will be spawned.

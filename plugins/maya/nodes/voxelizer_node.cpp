@@ -281,7 +281,7 @@ namespace fluid::maya {
 			FLUID_MAYA_CHECK_RETURN(output_cells_ref_data.set(cells_array_data), "finalize compute");
 			output_cells_ref_data.setClean();
 		}
-		
+
 		return MStatus::kSuccess;
 	}
 }

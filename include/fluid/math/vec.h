@@ -237,7 +237,9 @@ namespace fluid {
 			/// Used as \p enable_if for non-template member functions.
 			template <typename Ret, typename Dummy> using _valid_for_floating_point_t =
 				std::enable_if_t<std::is_floating_point_v<T> == std::is_same_v<Dummy, void>, Ret>;
-
+			/// Used as \p enable_if for non-template member functions.
+			template <typename Ret, typename Dummy> using _valid_for_integral_t =
+				std::enable_if_t<std::is_integral_v<T> == std::is_same_v<Dummy, void>, Ret>;
 		public:
 			// arithmetic
 			/// In-place addition.
@@ -298,6 +300,30 @@ namespace fluid {
 			/// Multiplication.
 			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(const T &lhs, Derived rhs) {
 				return rhs *= lhs;
+			}
+
+
+			// comparison
+			/// Equality.
+			template <typename Dummy = void> FLUID_FORCEINLINE [[nodiscard]] friend _valid_for_integral_t<
+				bool, Dummy
+			> operator==(const Derived &lhs, const Derived &rhs) {
+				bool res = true;
+				vec_ops::for_each(
+					[&res](T lhs, T rhs) {
+						if (lhs != rhs) {
+							res = false;
+						}
+					},
+					lhs, rhs
+						);
+				return res;
+			}
+			/// Inequality.
+			template <typename Dummy = void> FLUID_FORCEINLINE [[nodiscard]] friend _valid_for_integral_t<
+				bool, Dummy
+			> operator!=(const Derived &lhs, const Derived &rhs) {
+				return !(lhs == rhs);
 			}
 
 
@@ -398,24 +424,12 @@ namespace fluid {
 		/// Indexing.
 		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < 2);
-			switch (i) {
-			case 0:
-				return x;
-			case 1:
-				return y;
-			}
-			std::abort();
+			return (&x)[i];
 		}
 		/// Indexing.
 		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < 2);
-			switch (i) {
-			case 0:
-				return x;
-			case 1:
-				return y;
-			}
-			std::abort();
+			return (&x)[i];
 		}
 
 		T
@@ -445,28 +459,12 @@ namespace fluid {
 		/// Indexing.
 		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < 3);
-			switch (i) {
-			case 0:
-				return x;
-			case 1:
-				return y;
-			case 2:
-				return z;
-			}
-			std::abort();
+			return (&x)[i];
 		}
 		/// Indexing.
 		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < 3);
-			switch (i) {
-			case 0:
-				return x;
-			case 1:
-				return y;
-			case 2:
-				return z;
-			}
-			std::abort();
+			return (&x)[i];
 		}
 
 		T
@@ -497,32 +495,12 @@ namespace fluid {
 		/// Indexing.
 		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
 			assert(i < 4);
-			switch (i) {
-			case 0:
-				return x;
-			case 1:
-				return y;
-			case 2:
-				return z;
-			case 3:
-				return w;
-			}
-			std::abort();
+			return (&x)[i];
 		}
 		/// Indexing.
 		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
 			assert(i < 4);
-			switch (i) {
-			case 0:
-				return x;
-			case 1:
-				return y;
-			case 2:
-				return z;
-			case 3:
-				return w;
-			}
-			std::abort();
+			return (&x)[i];
 		}
 
 		T

@@ -108,6 +108,22 @@ namespace fluid {
 		return grid_min;
 	}
 
+	std::pair<vec3s, vec3s> voxelizer::get_overlapping_cell_range(vec3i offset, vec3s ref_grid_size) const {
+		vec3s min_coord = vec_ops::apply<vec3s>(
+			[](int coord) {
+				return coord < 0 ? static_cast<std::size_t>(-coord) : 0;
+			},
+			offset
+				);
+		vec3s max_coord = vec_ops::apply<vec3s>(
+			[](int coord, std::size_t max) {
+				return std::min(static_cast<std::size_t>(std::max(0, coord)), max);
+			},
+			offset + vec3i(voxels.get_size()), ref_grid_size
+				);
+		return { min_coord, max_coord };
+	}
+
 	void voxelizer::voxelize_triangle(vec3d p1, vec3d p2, vec3d p3) {
 		vec3d min = p1, max = p1;
 		_update_bounding_box(p2, min, max);

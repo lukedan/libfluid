@@ -120,7 +120,7 @@ void simulation_thread() {
 		}
 		source->coerce_velocity = true;*/
 
-		for (std::size_t x = 5; x < 7; ++x) {
+		for (std::size_t x = 5; x < 10; ++x) {
 			for (std::size_t y = 30; y < 40; ++y) {
 				for (std::size_t z = 20; z < 30; ++z) {
 					int ix = x, iz = z;
@@ -133,18 +133,18 @@ void simulation_thread() {
 			}
 		}
 
-		source->velocity = vec3d(100.0, 0.0, 0.0);
+		source->velocity = vec3d(200.0, 0.0, 0.0);
 		source->coerce_velocity = true;
 		sim.sources.emplace_back(std::move(source));
 	}
 
 	{
-		/*sim.grid().grid().for_each_in_range(
-			[](vec3s, fluid::fluid_grid::cell &cell) {
-				cell.cell_type = fluid::fluid_grid::cell::type::solid;
+		sim.grid().grid().for_each_in_range_checked(
+			[](vec3s, fluid::mac_grid::cell &cell) {
+				cell.cell_type = fluid::mac_grid::cell::type::solid;
 			},
 			vec3s(20, 0, 20), vec3s(30, 10, 30)
-				);*/
+				);
 	}
 
 	while (true) {

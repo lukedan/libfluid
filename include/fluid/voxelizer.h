@@ -54,6 +54,10 @@ namespace fluid {
 			vec3d min, vec3d max, double ref_cell_size, vec3d ref_grid_offset, vec3s grid_size
 		);
 
+		/// Returns the range of cells that overlap a reference grid. The input is the result of
+		/// \ref resize_reposition_grid_constrained() and the size of the reference grid.
+		std::pair<vec3s, vec3s> get_overlapping_cell_range(vec3i, vec3s) const;
+
 		/// Marks cells that overlap the given triangle as surface cells. The triangle must be entirely contained by
 		/// \ref voxels.
 		void voxelize_triangle(vec3d, vec3d, vec3d);

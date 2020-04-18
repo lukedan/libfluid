@@ -11,7 +11,7 @@
 #include <pcg_random.hpp>
 
 #include "misc.h"
-#include "fluid_grid.h"
+#include "mac_grid.h"
 #include "data_structures/space_hashing.h"
 #include "data_structures/source.h"
 #include "data_structures/grid.h"
@@ -28,8 +28,17 @@ namespace fluid {
 				cx, ///< The c vector used in APIC.
 				cy, ///< The c vector used in APIC.
 				cz; ///< The c vector used in APIC.
-			vec3s grid_index; ///< The index of this particle in the grid.
-			std::size_t raw_grid_index = 0; ///< Raw version of \ref grid_index.
+			/// The final position of this particle in the *previous* time step. This is used for collision
+			/// detection.
+			vec3d old_position;
+			std::size_t raw_cell_index = 0; ///< Raw index of the cell this particle's in.
+
+			/// Computes the cell index of this particle. This function assumes that the computation won't result in
+			/// underflow of the cell index.
+			vec3s compute_cell_index(vec3d grid_offset, double cell_size) const;
+			/// Computes the cell index and fraction position inside the cell of this particle. This function assumes
+			/// that the computation won't result in underflow of the cell index.
+			std::pair<vec3s, vec3d> compute_cell_index_and_position(vec3d grid_offset, double cell_size) const;
 		};
 		/// The simulation method.
 		enum class method : unsigned char {
@@ -53,18 +62,21 @@ namespace fluid {
 
 		/// Resets \ref _space_hash.
 		void reset_space_hash();
-		/// Updates \ref _space_hash and \ref particle::grid_index.
+		/// Updates \ref particles::raw_cell_index, then calls \ref hash_particles().
+		void update_and_hash_particles();
+		/// Updates \ref _space_hash. This function requires that \ref particles::raw_cell_index is valid.
 		void hash_particles();
 
-		/// Seeds the given cell so that it has at lest the given number of particles. \ref _space_hash and
-		/// \ref particle::grid_index must be valid for this function to be effective. This function updates
-		/// \ref _cell_particles::count but does **not** insert the particles at the right position.
+		/// Seeds the given cell so that it has at lest the given number of particles. \ref _space_hash must be valid
+		/// for this function to be effective. This function updates \ref _cell_particles::count but does **not**
+		/// insert the particles at the right position.
 		void seed_cell(vec3s cell, vec3d velocity, std::size_t density = default_seeding_density);
 
 		/// Seeds the given region using the given predicate that indicates whether a point is inside the region to
 		/// be seeded.
 		template <typename Func> void seed_func(
-			vec3s start, vec3s size, const Func &pred, std::size_t density = default_seeding_density
+			vec3s start, vec3s size, const Func &pred,
+			vec3d velocity = vec3d(), std::size_t density = default_seeding_density
 		) {
 			double small_cell_size = cell_size / density;
 			std::uniform_real_distribution<double> dist(0.0, small_cell_size);
@@ -76,6 +88,7 @@ namespace fluid {
 				for (std::size_t y = start.y; y < end.y; ++y) {
 					for (std::size_t x = start.x; x < end.x; ++x) {
 						vec3d cell_offset = vec3d(vec3s(x, y, z)) * cell_size;
+						std::size_t cell_index = grid().grid().index_to_raw(vec3s(x, y, z));
 						for (std::size_t sx = 0; sx < density; ++sx) {
 							for (std::size_t sy = 0; sy < density; ++sy) {
 								for (std::size_t sz = 0; sz < density; ++sz) {
@@ -86,6 +99,8 @@ namespace fluid {
 									if (pred(position)) {
 										particle p;
 										p.position = position;
+										p.velocity = velocity;
+										p.raw_cell_index = cell_index;
 										_particles.emplace_back(p);
 									}
 								}
@@ -96,9 +111,13 @@ namespace fluid {
 			}
 		}
 		/// Seeds the simulation with water particles in the given box.
-		void seed_box(vec3d start, vec3d size, std::size_t density = default_seeding_density);
+		void seed_box(
+			vec3d start, vec3d size, vec3d velocity = vec3d(), std::size_t density = default_seeding_density
+		);
 		/// Seeds the simulation with water particles in the given sphere.
-		void seed_sphere(vec3d center, double radius, std::size_t density = default_seeding_density);
+		void seed_sphere(
+			vec3d center, double radius, vec3d velocity = vec3d(), std::size_t density = default_seeding_density
+		);
 
 		/// Converts a world position to a cell index, clamping it to fit in the grid.
 		[[nodiscard]] vec3s world_position_to_cell_index(vec3d) const;
@@ -109,11 +128,11 @@ namespace fluid {
 		[[nodiscard]] double cfl() const;
 
 		/// Returns the velocity grid.
-		[[nodiscard]] fluid_grid &grid() {
+		[[nodiscard]] mac_grid &grid() {
 			return _grid;
 		}
 		/// \overload
-		[[nodiscard]] const fluid_grid &grid() const {
+		[[nodiscard]] const mac_grid &grid() const {
 			return _grid;
 		}
 		/// Returns the list of particles. Do not store references to these particles.
@@ -174,12 +193,12 @@ namespace fluid {
 		};
 
 		std::vector<particle> _particles; ///< All particles.
-		fluid_grid
+		mac_grid
 			_grid, ///< The grid.
 			_old_grid; ///< Grid that stores old velocities used for FLIP.
 
 		/// Space hashing. This is computed by \ref hash_particles(). The way this is computed is that all particles
-		/// are sorted according to \ref particle::raw_grid_index, then particles in each cell are recorded in this
+		/// are sorted according to \ref particle::raw_cell_index, then particles in each cell are recorded in this
 		/// grid.
 		grid3<_cell_particles> _space_hash;
 		/// Cells that contain fluid particles. This is computed by \ref hash_particles().
@@ -200,9 +219,9 @@ namespace fluid {
 		}
 
 		/// Returns the velocities of the negative direction faces of the given cell.
-		[[nodiscard]] static vec3d _get_negative_face_velocities(const fluid_grid&, vec3s);
+		[[nodiscard]] static vec3d _get_negative_face_velocities(const mac_grid&, vec3s);
 		/// Zeros the velocities at the boundaries of the grid.
-		static void _remove_boundary_velocities(fluid_grid&);
+		static void _remove_boundary_velocities(mac_grid&);
 
 		/// The kernel function used when transfering velocities to and from the grid. It is assumed that the input
 		/// vector has already been divided by \ref cell_size.
@@ -211,7 +230,7 @@ namespace fluid {
 		/// \ref cell_size and has no coordinate that lies out of [-cell_size, cell_size].
 		[[nodiscard]] FLUID_FORCEINLINE vec3d _grad_kernel(vec3d) const;
 
-		/// Advects particles.
+		/// Advects particles. Fluid sources that coerce particle velocities are processed here.
 		void _advect_particles(double);
 
 		/// Transfers velocities from particles to the grid using PIC.
@@ -242,10 +261,14 @@ namespace fluid {
 
 		/// Adds spring forces between particles to reduce clumping. \ref _space_hash must have been filled before
 		/// this is called. This is taken from "Preserving Fluid Sheets with Adaptively Sampled Anisotropic
-		/// Particles". This function computes \ref particle::grid_index but does not update \ref _space_hash.
+		/// Particles". After this function returns, \ref particle::raw_cell_index and \ref _space_hash are **not**
+		/// valid.
 		void _correct_positions(double dt);
 
-		/// Updates all fluid sources.
+		/// Detects collisions.
+		void _detect_collisions();
+
+		/// Seeds all fluid sources.
 		void _update_sources();
 	};
 }

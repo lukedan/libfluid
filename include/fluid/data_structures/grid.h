@@ -134,6 +134,77 @@ namespace fluid {
 			for_each_in_range_checked(std::forward<Callback>(cb), min_corner, center + diffmax + vec3s(1, 1, 1));
 		}
 
+		/// March through the grid. The callback's parameters are the (signed) index of the next cell, the direction
+		/// (dimension) of the face that's hit, and the \p t value of the intersection point. The callback should
+		/// return \p false to stop marching.
+		template <typename Callback> void march_cells(Callback &&cb, vec<Dim, double> from, vec<Dim, double> to) {
+			using _vecd = vec<Dim, double>;
+			using _veci = vec<Dim, int>;
+
+			auto _get_cell = [](_vecd pos) -> _veci {
+				return vec_ops::apply<_veci>(
+					[](double coord) {
+						return static_cast<int>(std::floor(coord));
+					},
+					pos
+						);
+			};
+
+			size_type coord;
+			for (std::size_t i = 0; i < Dim; ++i) {
+				coord[i] = i;
+			}
+
+			auto
+				from_cell = _get_cell(from),
+				to_cell = _get_cell(to);
+			_vecd diff = to - from, inv_abs_diff;
+			_veci advance, face_pos;
+			vec_ops::for_each(
+				[](int &adv, int &face, double &inv, double coord) {
+					if (coord > 0.0) {
+						adv = 1;
+						face = 1;
+					} else {
+						adv = -1;
+						face = 0;
+					}
+					inv = 1.0 / std::abs(coord);
+				},
+				advance, face_pos, inv_abs_diff, diff
+					);
+
+			auto t = vec_ops::memberwise::mul(
+				vec_ops::apply<_vecd>(
+					static_cast<double(*)(double)>(std::abs), _vecd(from_cell + face_pos) - from
+					),
+				inv_abs_diff
+			);
+			for (_veci current = from_cell; current != to_cell; ) {
+				std::size_t min_coord = 0;
+				double mint = 2.0;
+				vec_ops::for_each(
+					[&mint, &min_coord](double tv, std::size_t coord, std::size_t adv) {
+						if (tv < mint) {
+							mint = tv;
+							min_coord = coord;
+						}
+					},
+					t, coord, advance
+						);
+				if (mint > 1.0) {
+					// emergency break - some floating point error has led us to outside of the path
+					break;
+				}
+
+				current[min_coord] += advance[min_coord];
+				if (!cb(current, min_coord, t[min_coord])) {
+					break;
+				}
+				t[min_coord] += inv_abs_diff[min_coord];
+			}
+		}
+
 		/// Converts a (x, y, z) position into a raw index for \ref _cells.
 		std::size_t index_to_raw(size_type i) const {
 			// hopefully the compiler will optimize away this empty check in the release build
@@ -192,11 +263,16 @@ namespace fluid {
 		> FLUID_FORCEINLINE void _for_each_impl(
 			Callback &cb, const It &it, size_type min, size_type max, size_type &cur
 		) const {
+			if (min[ThisDim] >= max[ThisDim]) {
+				return;
+			}
 			It my_it = it;
 			std::size_t &i = cur[ThisDim];
-			for (i = min[ThisDim]; i < max[ThisDim]; ++i) {
-				_for_each_impl<OtherDims...>(cb, my_it, min, max, cur);
+			i = min[ThisDim];
+			_for_each_impl<OtherDims...>(cb, my_it, min, max, cur);
+			for (++i; i < max[ThisDim]; ++i) {
 				my_it += _layer_offset[ThisDim];
+				_for_each_impl<OtherDims...>(cb, my_it, min, max, cur);
 			}
 		}
 		/// End of recursion, where the callback is actually invoked.
