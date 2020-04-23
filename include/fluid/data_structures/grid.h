@@ -135,8 +135,8 @@ namespace fluid {
 		}
 
 		/// March through the grid. The callback's parameters are the (signed) index of the next cell, the direction
-		/// (dimension) of the face that's hit, and the \p t value of the intersection point. The callback should
-		/// return \p false to stop marching.
+		/// (dimension) of the face that's hit, the surface normal, and the \p t value of the intersection point. The
+		/// callback should return \p false to stop marching.
 		template <typename Callback> void march_cells(Callback &&cb, vec<Dim, double> from, vec<Dim, double> to) {
 			using _vecd = vec<Dim, double>;
 			using _veci = vec<Dim, int>;
@@ -173,6 +173,7 @@ namespace fluid {
 				},
 				advance, face_pos, inv_abs_diff, diff
 					);
+			_vecd normal = -_vecd(advance);
 
 			auto t = vec_ops::memberwise::mul(
 				vec_ops::apply<_vecd>(
@@ -192,13 +193,15 @@ namespace fluid {
 					},
 					t, coord, advance
 						);
-				if (mint > 1.0) {
+				if (!(mint <= 1.0)) {
 					// emergency break - some floating point error has led us to outside of the path
 					break;
 				}
 
 				current[min_coord] += advance[min_coord];
-				if (!cb(current, min_coord, t[min_coord])) {
+				_vecd n;
+				n[min_coord] = normal[min_coord];
+				if (!cb(current, min_coord, n, t[min_coord])) {
 					break;
 				}
 				t[min_coord] += inv_abs_diff[min_coord];

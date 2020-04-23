@@ -83,17 +83,21 @@ void simulation_thread() {
 	sim.resize(sim_grid_size);
 	sim.grid_offset = sim_grid_offset;
 	sim.cell_size = sim_cell_size;
-	sim.simulation_method = fluid::simulation::method::apic;
-	sim.blending_factor = 0.99;
+	sim.simulation_method = fluid::simulation::method::flip_blend;
+	/*sim.blending_factor = 0.99;*/
+	sim.blending_factor = 1.0;
 	sim.gravity = vec3d(0.0, -981.0, 0.0);
 
 	sim.pre_time_step_callback = [](double dt) {
 		std::cout << "  time step " << dt << "\n";
 	};
-	sim.post_pressure_solve_callback = [](
+	sim.post_pressure_solve_callback = [&sim](
 		double, std::vector<double> &pressure, double residual, std::size_t iters
 	) {
 		std::cout << "    iterations = " << iters << "\n";
+		if (iters > 100) {
+			std::cout << "*** WARNING: large number of iterations\n";
+		}
 		std::cout << "    residual = " << residual << "\n";
 		auto max_it = std::max_element(pressure.begin(), pressure.end());
 		if (max_it != pressure.end()) {
@@ -111,40 +115,42 @@ void simulation_thread() {
 	{
 		auto source = std::make_unique<fluid::source>();
 
-		/*for (std::size_t x = 0; x < 3; ++x) {
-			for (std::size_t y = 35; y < 45; ++y) {
+		for (std::size_t x = 20; x < 30; ++x) {
+			for (std::size_t y = 40; y < 45; ++y) {
 				for (std::size_t z = 20; z < 30; ++z) {
 					source->cells.emplace_back(x, y, z);
 				}
 			}
 		}
-		source->coerce_velocity = true;*/
 
-		for (std::size_t x = 5; x < 10; ++x) {
+		/*for (std::size_t x = 5; x < 10; ++x) {
 			for (std::size_t y = 30; y < 40; ++y) {
 				for (std::size_t z = 20; z < 30; ++z) {
-					int ix = x, iz = z;
-					ix -= 25;
-					iz -= 25;
-					/*if (ix * ix + iz * iz < 25) {*/
-						source->cells.emplace_back(x, y, z);
-					/*}*/
+					source->cells.emplace_back(x, y, z);
 				}
 			}
 		}
-
 		source->velocity = vec3d(200.0, 0.0, 0.0);
-		source->coerce_velocity = true;
+		source->coerce_velocity = true;*/
+
 		sim.sources.emplace_back(std::move(source));
 	}
 
 	{
-		sim.grid().grid().for_each_in_range_checked(
+/*#define OBSTACLE*/
+#ifdef OBSTACLE
+		sim.grid().grid().for_each(
 			[](vec3s, fluid::mac_grid::cell &cell) {
 				cell.cell_type = fluid::mac_grid::cell::type::solid;
+			}
+		);
+		sim.grid().grid().for_each_in_range_checked(
+			[](vec3s, fluid::mac_grid::cell &cell) {
+				cell.cell_type = fluid::mac_grid::cell::type::air;
 			},
-			vec3s(20, 0, 20), vec3s(30, 10, 30)
+			vec3s(1, 1, 1), vec3s(49, 49, 49)
 				);
+#endif
 	}
 
 	while (true) {

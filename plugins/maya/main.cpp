@@ -14,25 +14,29 @@
 #include "nodes/voxelizer_node.h"
 #include "commands/create_simulation_grid.h"
 #include "commands/add_fluid_source.h"
+#include "commands/add_obstacle.h"
 
 namespace fluid::maya {
-	MTypeId
+	const MTypeId
 		grid_node::id{ 0x98765432 },
 		mesher_node::id{ 0x98765433 },
 		point_cloud_loader_node::id{ 0x98765434 },
 		voxelizer_node::id{ 0x98765435 };
 
 	const MString
-		create_simulation_grid_command::name{ "fluidCreateSimulationGrid" },
-		add_fluid_source_command::name{ "fluidAddFluidSource" };
+		create_simulation_grid_command::name{ "libfluidCreateSimulationGrid" },
+		add_fluid_source_command::name{ "libfluidAddFluidSource" },
+		add_obstacle_command::name{ "libfluidAddObstacle" };
 }
 
 const MString top_level_menu_name{ "libfluid" };
 const MString create_simulation_grid_menu_name{ "Create Simulation Grid" };
 const MString add_fluid_source_menu_name{ "Add as Fluid Source" };
+const MString add_obstacle_menu_name{ "Add as Obstacle" };
 
 MStringArray create_simulation_grid_menu;
 MStringArray add_fluid_source_menu;
+MStringArray add_obstacle_menu;
 
 /// Initializes the plugin.
 MStatus initializePlugin(MObject obj) {
@@ -83,6 +87,13 @@ MStatus initializePlugin(MObject obj) {
 		),
 		"command registration"
 	);
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.registerCommand(
+			fluid::maya::add_obstacle_command::name,
+			fluid::maya::add_obstacle_command::creator
+		),
+		"command registration"
+	);
 
 
 	MString top_level_menu_path;
@@ -105,6 +116,13 @@ MStatus initializePlugin(MObject obj) {
 	);
 	FLUID_MAYA_CHECK(stat, "menu item registration");
 
+	add_obstacle_menu = plugin.addMenuItem(
+		add_obstacle_menu_name, top_level_menu_path,
+		fluid::maya::add_obstacle_command::name, "",
+		false, nullptr, &stat
+	);
+	FLUID_MAYA_CHECK(stat, "menu item registration");
+
 	return MStatus::kSuccess;
 }
 
@@ -123,9 +141,13 @@ MStatus uninitializePlugin(MObject obj) {
 	FLUID_MAYA_CHECK_RETURN(
 		plugin.deregisterCommand(fluid::maya::add_fluid_source_command::name), "command deregisteration"
 	);
+	FLUID_MAYA_CHECK_RETURN(
+		plugin.deregisterCommand(fluid::maya::add_obstacle_command::name), "command deregisteration"
+	);
 
 	FLUID_MAYA_CHECK_RETURN(plugin.removeMenuItem(create_simulation_grid_menu), "menu item deregistration");
 	FLUID_MAYA_CHECK_RETURN(plugin.removeMenuItem(add_fluid_source_menu), "menu item deregistration");
+	FLUID_MAYA_CHECK_RETURN(plugin.removeMenuItem(add_obstacle_menu), "menu item deregistration");
 
 	return MStatus::kSuccess;
 }

@@ -30,9 +30,12 @@ namespace fluid::maya {
 			attr_source_coerce_velocity,
 			attr_source_seeding_density, ///< The desired density inside the source region.
 			attr_sources, ///< Compound attribute that includes data of all fluid sources.
+			// obstacle attributes
+			attr_obstacle_cells, ///< The cells that belong to a obstacle.
+			attr_obstacles, ///< Compound attribute that includes all obstacles.
 			// output
 			attr_output_particle_positions; ///< The particle positions attribute.
-		static MTypeId id; ///< The ID of this node.
+		const static MTypeId id; ///< The ID of this node.
 
 		/// Updates the simulation.
 		MStatus compute(const MPlug&, MDataBlock&) override;

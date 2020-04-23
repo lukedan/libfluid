@@ -46,14 +46,17 @@ namespace fluid {
 		}
 
 		// store old positions for collision detection
-		for (particle &p : _particles) {
-			p.old_position = p.position;
-		}
-
 		update_and_hash_particles();
 		_advect_particles(dt);
 		if (post_advection_callback) {
 			post_advection_callback(dt);
+		}
+
+		if constexpr (precise_collision_detection) {
+			_detect_collisions();
+			for (particle &p : _particles) {
+				p.old_position = p.position;
+			}
 		}
 
 		update_and_hash_particles();
@@ -80,19 +83,17 @@ namespace fluid {
 		// solve and apply pressure
 		{
 			std::vector<vec3s> fluid_cells;
-			for (std::size_t raw : _fluid_cells) {
-				fluid_cells.emplace_back(grid().grid().index_from_raw(raw));
-			}
-			// remove solid cells
-			auto end = fluid_cells.end();
-			for (auto it = fluid_cells.begin(); it != end; ) {
-				if (grid().grid()(*it).cell_type == mac_grid::cell::type::solid) {
-					std::swap(*--end, *it);
-				} else {
-					++it;
+			if constexpr (precise_collision_detection) {
+				for (std::size_t raw : _fluid_cells) {
+					fluid_cells.emplace_back(grid().grid().index_from_raw(raw));
+				}
+			} else {
+				for (std::size_t raw : _fluid_cells) {
+					if (grid().grid()[raw].cell_type != mac_grid::cell::type::solid) {
+						fluid_cells.emplace_back(grid().grid().index_from_raw(raw));
+					}
 				}
 			}
-			fluid_cells.erase(end, fluid_cells.end());
 
 			pressure_solver solver(*this, fluid_cells);
 			auto [pressure, residual, iters] = solver.solve(dt);
@@ -110,8 +111,10 @@ namespace fluid {
 		if (post_correction_callback) {
 			post_correction_callback(dt);
 		}
-
 		_detect_collisions();
+		for (particle &p : _particles) {
+			p.old_position = p.position;
+		}
 
 		_transfer_from_grid();
 		if (post_grid_to_particle_transfer_callback) {
@@ -605,27 +608,74 @@ namespace fluid {
 	}
 
 	void simulation::_detect_collisions() {
-		for (particle &p : _particles) {
-			grid().grid().march_cells(
-				[this, &p](vec3i pos, std::size_t dim, double t) {
-					if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0) {
-						vec3s upos(pos);
-						if (
-							upos.x < grid().grid().get_size().x &&
-							upos.y < grid().grid().get_size().y &&
-							upos.z < grid().grid().get_size().z
-						) {
-							if (grid().grid()(pos.x, pos.y, pos.z).cell_type == mac_grid::cell::type::solid) {
-								/*p.velocity[dim] = 0.0;*/
-								t -= 0.1; // TODO magic number, necessary?
-								p.position = t * p.position + (1.0 - t) * p.old_position;
-								return false;
+		int nparticles = static_cast<int>(_particles.size());
+#pragma omp parallel for
+		for (int i = 0; i < nparticles; ++i) {
+			particle &p = _particles[static_cast<std::size_t>(i)];
+			vec3d from = p.old_position, to = p.position;
+			for (std::size_t i = 0; i < 3; ++i) {
+				bool into_wall = false;
+				grid().grid().march_cells(
+					[this, &p, &from, &to, &into_wall](vec3i pos, std::size_t dim, vec3d normal, double t) {
+						if (pos.x >= 0 && pos.y >= 0 && pos.z >= 0) {
+							vec3s upos(pos);
+							if (
+								upos.x < grid().grid().get_size().x &&
+								upos.y < grid().grid().get_size().y &&
+								upos.z < grid().grid().get_size().z
+							) {
+								if (grid().grid()(pos.x, pos.y, pos.z).cell_type != mac_grid::cell::type::solid) {
+									return true;
+								}
 							}
 						}
+						// collision
+						p.velocity[dim] = 0.0;
+
+						vec3d offset = to - from;
+						t += boundary_skin_width / vec_ops::dot(offset, normal);
+						t = std::max(t, 0.0);
+						from = t * to + (1.0 - t) * from;
+						to[dim] = from[dim];
+
+						into_wall = true;
+						return false;
+					},
+					(from - grid_offset) / cell_size, (to - grid_offset) / cell_size
+						);
+				if (!into_wall) {
+					break;
+				}
+			}
+			p.position = to;
+
+			// take into account skin width of nearby solid cells
+			vec3d grid_pos = p.position - grid_offset;
+			vec3s cell_index(grid_pos / cell_size);
+			vec3d cell_pos = grid_pos - vec3d(cell_index) * cell_size;
+			double cell_skin_max = cell_size - boundary_skin_width;
+			vec_ops::for_each(
+				[this, grid_pos, cell_index, cell_skin_max](double cp, double &pos, std::size_t dim) {
+					vec3s offset;
+					offset[dim] = 1;
+					if (cp < boundary_skin_width) {
+						if (
+							cell_index[dim] == 0 ||
+							grid().grid()(cell_index - offset).cell_type == mac_grid::cell::type::solid
+						) {
+							pos += boundary_skin_width - cp;
+						}
 					}
-					return true;
+					if (cp > cell_skin_max) {
+						if (
+							cell_index[dim] + 1 >= grid().grid().get_size()[dim] ||
+							grid().grid()(cell_index + offset).cell_type == mac_grid::cell::type::solid
+						) {
+							pos += cell_skin_max - cp;
+						}
+					}
 				},
-				(p.old_position - grid_offset) / cell_size, (p.position - grid_offset) / cell_size
+				cell_pos, p.position, vec3s(0, 1, 2)
 					);
 		}
 	}

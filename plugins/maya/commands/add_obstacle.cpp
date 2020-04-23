@@ -1,23 +1,25 @@
-#include "add_fluid_source.h"
+#include "add_obstacle.h"
 
 /// \file
-/// Implementation of the addFluidSource command.
+/// Implementation of the add_obstacle command.
 
-#include <maya/MGlobal.h>
+#include <vector>
+
 #include <maya/MSelectionList.h>
-#include <maya/MDagPath.h>
+#include <maya/MGlobal.h>
 #include <maya/MFnDependencyNode.h>
+#include <maya/MDagPath.h>
 
 #include "../misc.h"
 #include "../nodes/grid_node.h"
 #include "../nodes/voxelizer_node.h"
 
 namespace fluid::maya {
-	void *add_fluid_source_command::creator() {
-		return new add_fluid_source_command();
+	void *add_obstacle_command::creator() {
+		return new add_obstacle_command();
 	}
 
-	MStatus add_fluid_source_command::doIt(const MArgList &args) {
+	MStatus add_obstacle_command::doIt(const MArgList&) {
 		MStatus stat;
 
 		// get selected grid and geometry
@@ -66,7 +68,7 @@ namespace fluid::maya {
 
 		MFnDependencyNode fn_grid(grid, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
-		MPlug sources_plug = fn_grid.findPlug(grid_node::attr_sources, false, &stat);
+		MPlug obstacles_plug = fn_grid.findPlug(grid_node::attr_obstacles, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
 		MPlug ref_cell_size_plug = fn_grid.findPlug(grid_node::attr_cell_size, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
@@ -75,7 +77,7 @@ namespace fluid::maya {
 		MPlug ref_grid_size_plug = fn_grid.findPlug(grid_node::attr_grid_size, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
 
-		unsigned int num_sources = sources_plug.numElements(&stat);
+		unsigned int num_obstacles = obstacles_plug.numElements(&stat);
 		FLUID_MAYA_CHECK(stat, "attribute connection");
 
 		for (MPlug &mesh_plug : mesh_plugs) {
@@ -106,7 +108,7 @@ namespace fluid::maya {
 
 			// set attributes
 			FLUID_MAYA_CHECK_RETURN(vox_include_interior_plug.setValue(true), "set attributes");
-			FLUID_MAYA_CHECK_RETURN(vox_include_surface_plug.setValue(true), "set attributes");
+			FLUID_MAYA_CHECK_RETURN(vox_include_surface_plug.setValue(false), "set attributes");
 
 			// mesh -> voxelizer
 			FLUID_MAYA_CHECK_RETURN(_graph_modifier.connect(mesh_plug, vox_mesh_plug), "attribute connection");
@@ -123,14 +125,14 @@ namespace fluid::maya {
 			);
 
 			// voxelizer -> grid
-			MPlug source_element = sources_plug.elementByLogicalIndex(num_sources, &stat);
+			MPlug obstacle_element = obstacles_plug.elementByLogicalIndex(num_obstacles, &stat);
 			FLUID_MAYA_CHECK(stat, "attribute connection");
-			source_element = source_element.child(grid_node::attr_source_cells, &stat);
+			obstacle_element = obstacle_element.child(grid_node::attr_obstacle_cells, &stat);
 			FLUID_MAYA_CHECK(stat, "attribute connection");
 			FLUID_MAYA_CHECK_RETURN(
-				_graph_modifier.connect(vox_cells_plug, source_element), "attribute connection"
+				_graph_modifier.connect(vox_cells_plug, obstacle_element), "attribute connection"
 			);
-			++num_sources;
+			++num_obstacles;
 		}
 
 		FLUID_MAYA_CHECK_RETURN(_graph_modifier.doIt(), "execute queued operations");
@@ -138,11 +140,11 @@ namespace fluid::maya {
 		return MStatus::kSuccess;
 	}
 
-	MStatus add_fluid_source_command::undoIt() {
+	MStatus add_obstacle_command::undoIt() {
 		return _graph_modifier.undoIt();
 	}
 
-	MStatus add_fluid_source_command::redoIt() {
+	MStatus add_obstacle_command::redoIt() {
 		return _graph_modifier.doIt();
 	}
 }

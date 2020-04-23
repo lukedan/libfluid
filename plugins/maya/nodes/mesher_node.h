@@ -18,7 +18,7 @@ namespace fluid::maya {
 			attr_particle_extents, ///< The particle extents attribute.
 			attr_particle_check_radius, ///< The particle check radius attribute.
 			attr_output_mesh; ///< The output mesh node attribute.
-		static MTypeId id; ///< The ID of this node.
+		const static MTypeId id; ///< The ID of this node.
 
 		/// Updates the mesh.
 		MStatus compute(const MPlug&, MDataBlock&) override;

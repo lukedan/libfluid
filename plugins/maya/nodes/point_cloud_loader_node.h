@@ -12,7 +12,7 @@ namespace fluid::maya {
 		static MObject
 			attr_file_name, ///< The file name attribute.
 			attr_output_points; ///< The output point cloud attribute.
-		static MTypeId id; ///< The ID of this node.
+		const static MTypeId id; ///< The ID of this node.
 
 		/// Reloads the point cloud.
 		MStatus compute(const MPlug&, MDataBlock&) override;

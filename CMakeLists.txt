@@ -74,7 +74,9 @@ if(FLUID_BUILD_MAYA_PLUGIN)
 	target_sources(fluid_maya
 		PRIVATE
 			"plugins/maya/commands/add_fluid_source.cpp"
+			"plugins/maya/commands/add_obstacle.cpp"
 			"plugins/maya/commands/create_simulation_grid.cpp"
+			"plugins/maya/nodes/grid_manipulator_node.cpp"
 			"plugins/maya/nodes/grid_node.cpp"
 			"plugins/maya/nodes/mesher_node.cpp"
 			"plugins/maya/nodes/point_cloud_loader_node.cpp"

@@ -47,6 +47,9 @@ namespace fluid {
 			apic ///< APIC.
 		};
 
+		/// If \p true, collision detection will be ran twice per time step, i.e., one extra collision detection
+		/// after advection. Setting this to \p false can result in more noisy simulations.
+		constexpr static bool precise_collision_detection = true;
 		/// The default density used when seeding particles.
 		constexpr static std::size_t default_seeding_density = 2;
 
@@ -98,7 +101,7 @@ namespace fluid {
 										vec3d(dist(random), dist(random), dist(random));
 									if (pred(position)) {
 										particle p;
-										p.position = position;
+										p.old_position = p.position = position;
 										p.velocity = velocity;
 										p.raw_cell_index = cell_index;
 										_particles.emplace_back(p);

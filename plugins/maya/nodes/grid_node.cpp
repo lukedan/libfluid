@@ -32,6 +32,9 @@ namespace fluid::maya {
 		grid_node::attr_source_seeding_density,
 		grid_node::attr_sources,
 
+		grid_node::attr_obstacle_cells,
+		grid_node::attr_obstacles,
+
 		grid_node::attr_output_particle_positions;
 
 	void *grid_node::creator() {
@@ -128,6 +131,24 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(sources.setArray(true), "parameter creation");
 		FLUID_MAYA_CHECK_RETURN(sources.setDisconnectBehavior(MFnAttribute::kDelete), "parameter creation");
 
+		// obstacles
+		MFnTypedAttribute obstacle_cells;
+		attr_obstacle_cells = obstacle_cells.create(
+			"obstacleCells", "oc", MFnData::kIntArray, MObject::kNullObj, &stat
+		);
+		FLUID_MAYA_CHECK(stat, "parameter creation");
+		FLUID_MAYA_CHECK_RETURN(
+			obstacle_cells.setDisconnectBehavior(MFnAttribute::kDelete), "parameter creation"
+		);
+
+		MFnCompoundAttribute obstacles;
+		attr_obstacles = obstacles.create("obstacles", "obs", &stat);
+		FLUID_MAYA_CHECK(stat, "parameter creation");
+		FLUID_MAYA_CHECK_RETURN(obstacles.addChild(attr_obstacle_cells), "parameter creation");
+		FLUID_MAYA_CHECK_RETURN(obstacles.setArray(true), "parameter creation");
+		FLUID_MAYA_CHECK_RETURN(obstacles.setDisconnectBehavior(MFnAttribute::kDelete), "parameter creation");
+
+		// output
 		MFnTypedAttribute output_particle_positions;
 		attr_output_particle_positions = output_particle_positions.create(
 			"outputParticlePositions", "out", MFnData::kPointArray, MObject::kNullObj, &stat
@@ -146,6 +167,8 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_transfer_method), "parameter registration");
 		// source
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_sources), "parameter registration");
+		// obstacle
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_obstacles), "parameter registration");
 		// output
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_particle_positions), "parameter registration");
 
@@ -185,6 +208,13 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(
 			attributeAffects(attr_sources, attr_output_particle_positions), "parameter registration"
 		);
+		// obstacle
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_obstacle_cells, attr_output_particle_positions), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_obstacles, attr_output_particle_positions), "parameter registration"
+		);
 
 		return MStatus::kSuccess;
 	}
@@ -213,6 +243,8 @@ namespace fluid::maya {
 			MDataHandle transfer_method_data = data_block.inputValue(attr_transfer_method, &stat);
 			FLUID_MAYA_CHECK(stat, "retrieve attribute");
 			MArrayDataHandle sources_data = data_block.inputArrayValue(attr_sources, &stat);
+			FLUID_MAYA_CHECK(stat, "retrieve attribute");
+			MArrayDataHandle obstacles_data = data_block.inputArrayValue(attr_obstacles, &stat);
 			FLUID_MAYA_CHECK(stat, "retrieve attribute");
 
 			simulation sim;
@@ -274,6 +306,38 @@ namespace fluid::maya {
 						break;
 					}
 					FLUID_MAYA_CHECK_RETURN(sources_data.next(), "retrieve attribute");
+				}
+			}
+			// obstacles
+			unsigned int obstacle_count = obstacles_data.elementCount(&stat);
+			FLUID_MAYA_CHECK(stat, "retrieve attribute");
+			if (obstacle_count > 0) {
+				for (unsigned int i = 0; ; ) {
+					MDataHandle single_obstacle_data = obstacles_data.inputValue(&stat);
+					FLUID_MAYA_CHECK(stat, "retrieve attribute");
+
+					MDataHandle obstacle_cells_data = single_obstacle_data.child(attr_obstacle_cells);
+					MFnIntArrayData obstacle_cells(obstacle_cells_data.data(), &stat);
+					FLUID_MAYA_CHECK(stat, "retrieve attribute");
+
+					{ // cells
+						unsigned int num_cells = obstacle_cells.length(&stat) / 3;
+						FLUID_MAYA_CHECK(stat, "retrieve attribute");
+						unsigned int int_index = 0;
+						for (unsigned int i = 0; i < num_cells; ++i) {
+							vec3s cell_index;
+							cell_index.x = static_cast<std::size_t>(obstacle_cells[int_index++]);
+							cell_index.y = static_cast<std::size_t>(obstacle_cells[int_index++]);
+							cell_index.z = static_cast<std::size_t>(obstacle_cells[int_index++]);
+							sim.grid().grid()(cell_index).cell_type = mac_grid::cell::type::solid;
+						}
+					}
+
+					// MArrayDataHandle::next() returns kFailure when there's no next element
+					if (++i >= obstacle_count) {
+						break;
+					}
+					FLUID_MAYA_CHECK_RETURN(obstacles_data.next(), "retrieve attribute");
 				}
 			}
 

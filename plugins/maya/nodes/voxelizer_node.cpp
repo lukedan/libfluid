@@ -21,6 +21,9 @@ namespace fluid::maya {
 		voxelizer_node::attr_cell_size,
 		voxelizer_node::attr_ref_grid_offset,
 		voxelizer_node::attr_ref_grid_size,
+		voxelizer_node::attr_include_interior,
+		voxelizer_node::attr_include_surface,
+
 		voxelizer_node::attr_output_grid_offset,
 		voxelizer_node::attr_output_grid_size,
 		voxelizer_node::attr_output_cells,
@@ -51,6 +54,18 @@ namespace fluid::maya {
 
 		MFnNumericAttribute ref_grid_size;
 		attr_ref_grid_size = ref_grid_size.create("referenceGridSize", "rsz", MFnNumericData::k3Int, 50.0, &stat);
+		FLUID_MAYA_CHECK(stat, "parameter creation");
+
+		MFnNumericAttribute include_interior;
+		attr_include_interior = include_interior.create(
+			"includeInterior", "int", MFnNumericData::kBoolean, 1.0, &stat
+		);
+		FLUID_MAYA_CHECK(stat, "parameter creation");
+
+		MFnNumericAttribute include_surface;
+		attr_include_surface = include_surface.create(
+			"includeSurface", "surf", MFnNumericData::kBoolean, 1.0, &stat
+		);
 		FLUID_MAYA_CHECK(stat, "parameter creation");
 
 		MFnNumericAttribute output_grid_offset;
@@ -86,6 +101,8 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_cell_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_ref_grid_offset), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_ref_grid_size), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_include_interior), "parameter registration");
+		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_include_surface), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_grid_offset), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_grid_size), "parameter registration");
 		FLUID_MAYA_CHECK_RETURN(addAttribute(attr_output_cells), "parameter registration");
@@ -144,6 +161,32 @@ namespace fluid::maya {
 			attributeAffects(attr_ref_grid_size, attr_output_cells_ref), "parameter registration"
 		);
 
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_interior, attr_output_grid_offset), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_interior, attr_output_grid_size), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_interior, attr_output_cells), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_interior, attr_output_cells_ref), "parameter registration"
+		);
+
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_surface, attr_output_grid_offset), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_surface, attr_output_grid_size), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_surface, attr_output_cells), "parameter registration"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			attributeAffects(attr_include_surface, attr_output_cells_ref), "parameter registration"
+		);
+
 		return MStatus::kSuccess;
 	}
 
@@ -167,6 +210,10 @@ namespace fluid::maya {
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
 		MDataHandle ref_grid_size_data = data_block.inputValue(attr_ref_grid_size, &stat);
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
+		MDataHandle include_interior_data = data_block.inputValue(attr_include_interior, &stat);
+		FLUID_MAYA_CHECK(stat, "retrieve attribute");
+		MDataHandle include_surface_data = data_block.inputValue(attr_include_surface, &stat);
+		FLUID_MAYA_CHECK(stat, "retrieve attribute");
 		MDataHandle output_grid_offset_data = data_block.outputValue(attr_output_grid_offset, &stat);
 		FLUID_MAYA_CHECK(stat, "retrieve attribute");
 		MDataHandle output_grid_size_data = data_block.outputValue(attr_output_grid_size, &stat);
@@ -181,6 +228,7 @@ namespace fluid::maya {
 		double cell_size = cell_size_data.asDouble();
 		const double3 &ref_grid_offset = ref_grid_offset_data.asDouble3();
 		const int3 &ref_grid_size = ref_grid_size_data.asInt3();
+		bool include_interior = include_interior_data.asBool(), include_surface = include_surface_data.asBool();
 
 		mesh<double, vec4d, double, int> vox_mesh;
 		{ // vertices
@@ -239,11 +287,24 @@ namespace fluid::maya {
 		}
 		// gather occupied cells
 		std::vector<vec3s> occupied_cells;
-		vox.voxels.for_each([&occupied_cells](vec3s pos, voxelizer::cell_type type) {
-			if (type != voxelizer::cell_type::exterior) {
-				occupied_cells.emplace_back(pos);
+		vox.voxels.for_each(
+			[&occupied_cells, include_interior, include_surface](vec3s pos, voxelizer::cell_type type) {
+				switch (type) {
+				case voxelizer::cell_type::interior:
+					if (include_interior) {
+						occupied_cells.emplace_back(pos);
+					}
+					break;
+				case voxelizer::cell_type::surface:
+					if (include_surface) {
+						occupied_cells.emplace_back(pos);
+					}
+					break;
+				default:
+					break;
+				}
 			}
-		});
+		);
 		{ // cells
 			MIntArray array;
 			array.setLength(static_cast<unsigned int>(occupied_cells.size() * 3));
