@@ -12,6 +12,7 @@
 
 #include "../misc.h"
 #include "../nodes/grid_node.h"
+#include "../nodes/grid_manipulator_node.h"
 #include "../nodes/mesher_node.h"
 
 namespace fluid::maya {

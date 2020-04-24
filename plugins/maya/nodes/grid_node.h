@@ -7,7 +7,9 @@
 #include <deque>
 
 #include <maya/MPxNode.h>
+#include <maya/MPxLocatorNode.h>
 #include <maya/MPointArray.h>
+#include <maya/MPxDrawOverride.h>
 
 #include <fluid/simulation.h>
 
@@ -35,7 +37,7 @@ namespace fluid::maya {
 			attr_obstacles, ///< Compound attribute that includes all obstacles.
 			// output
 			attr_output_particle_positions; ///< The particle positions attribute.
-		const static MTypeId id; ///< The ID of this node.
+		static MTypeId id; ///< The ID of this node.
 
 		/// Updates the simulation.
 		MStatus compute(const MPlug&, MDataBlock&) override;

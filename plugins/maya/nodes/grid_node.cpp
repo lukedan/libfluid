@@ -3,6 +3,7 @@
 /// \file
 /// Implementation of the grid node.
 
+#include <maya/MPxManipContainer.h>
 #include <maya/MFnUnitAttribute.h>
 #include <maya/MTime.h>
 #include <maya/MFnNumericAttribute.h>
@@ -11,6 +12,9 @@
 #include <maya/MFnCompoundAttribute.h>
 #include <maya/MFnPointArrayData.h>
 #include <maya/MFnIntArrayData.h>
+#include <maya/MFnDependencyNode.h>
+#include <maya/MPlug.h>
+#include <maya/MHWGeometryUtilities.h>
 
 #include <fluid/simulation.h>
 
@@ -43,6 +47,8 @@ namespace fluid::maya {
 
 	MStatus grid_node::initialize() {
 		MStatus stat;
+
+		FLUID_MAYA_CHECK_RETURN(MPxManipContainer::addToManipConnectTable(id), "register manipulator");
 
 		// create attributes
 		MFnUnitAttribute time;

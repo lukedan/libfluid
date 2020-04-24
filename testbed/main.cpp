@@ -21,6 +21,7 @@ using fluid::vec2d;
 using fluid::vec3d;
 using fluid::vec3s;
 
+#define USE_OBSTACLE 0
 
 std::atomic_bool
 sim_paused = true,
@@ -137,8 +138,7 @@ void simulation_thread() {
 	}
 
 	{
-/*#define OBSTACLE*/
-#ifdef OBSTACLE
+#if USE_OBSTACLE
 		sim.grid().grid().for_each(
 			[](vec3s, fluid::mac_grid::cell &cell) {
 				cell.cell_type = fluid::mac_grid::cell::type::solid;
