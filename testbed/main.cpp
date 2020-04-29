@@ -21,7 +21,7 @@ using fluid::vec2d;
 using fluid::vec3d;
 using fluid::vec3s;
 
-#define USE_OBSTACLE 0
+#define USE_OBSTACLE 1
 
 std::atomic_bool
 sim_paused = true,
@@ -84,7 +84,7 @@ void simulation_thread() {
 	sim.resize(sim_grid_size);
 	sim.grid_offset = sim_grid_offset;
 	sim.cell_size = sim_cell_size;
-	sim.simulation_method = fluid::simulation::method::flip_blend;
+	sim.simulation_method = fluid::simulation::method::apic;
 	/*sim.blending_factor = 0.99;*/
 	sim.blending_factor = 1.0;
 	sim.gravity = vec3d(0.0, -981.0, 0.0);

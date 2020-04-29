@@ -271,6 +271,9 @@ namespace fluid {
 		/// Detects collisions.
 		void _detect_collisions();
 
+		/// Velocity extrapolation.
+		void _extrapolate_velocities(const std::vector<vec3s> &fluid_cells);
+
 		/// Seeds all fluid sources.
 		void _update_sources();
 	};

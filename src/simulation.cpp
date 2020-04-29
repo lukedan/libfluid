@@ -80,21 +80,21 @@ namespace fluid {
 			post_gravity_callback(dt);
 		}
 
-		// solve and apply pressure
-		{
-			std::vector<vec3s> fluid_cells;
-			if constexpr (precise_collision_detection) {
-				for (std::size_t raw : _fluid_cells) {
+		std::vector<vec3s> fluid_cells;
+		if constexpr (precise_collision_detection) {
+			for (std::size_t raw : _fluid_cells) {
+				fluid_cells.emplace_back(grid().grid().index_from_raw(raw));
+			}
+		} else {
+			for (std::size_t raw : _fluid_cells) {
+				if (grid().grid()[raw].cell_type != mac_grid::cell::type::solid) {
 					fluid_cells.emplace_back(grid().grid().index_from_raw(raw));
 				}
-			} else {
-				for (std::size_t raw : _fluid_cells) {
-					if (grid().grid()[raw].cell_type != mac_grid::cell::type::solid) {
-						fluid_cells.emplace_back(grid().grid().index_from_raw(raw));
-					}
-				}
 			}
+		}
 
+		// solve and apply pressure
+		{
 			pressure_solver solver(*this, fluid_cells);
 			auto [pressure, residual, iters] = solver.solve(dt);
 			if (post_pressure_solve_callback) {
@@ -115,6 +115,8 @@ namespace fluid {
 		for (particle &p : _particles) {
 			p.old_position = p.position;
 		}
+
+		_extrapolate_velocities(fluid_cells);
 
 		_transfer_from_grid();
 		if (post_grid_to_particle_transfer_callback) {
@@ -677,6 +679,77 @@ namespace fluid {
 				},
 				cell_pos, p.position, vec3s(0, 1, 2)
 					);
+		}
+	}
+
+	void simulation::_extrapolate_velocities(const std::vector<vec3s> &fluid_cells) {
+		grid3<unsigned char> valid(grid().grid().get_size(), 0);
+		for (vec3s cell : fluid_cells) {
+			valid(cell) = 1;
+		}
+
+		std::vector<std::size_t> new_valid_cells;
+
+		for (std::size_t i = 0; i < 1; ++i) {
+			// update valid cells
+			for (std::size_t cell : new_valid_cells) {
+				valid[cell] = 1;
+			}
+			new_valid_cells.clear();
+
+			// one iteration of extrapolation
+			valid.for_each(
+				[this, &valid, &new_valid_cells](vec3s pos, unsigned char cell_valid) {
+					if (cell_valid != 0) {
+						return;
+					}
+					std::size_t valid_neighbors = 0;
+					vec3d neighbor_vels;
+					vec3<mac_grid::cell::type> type_pos(
+						mac_grid::cell::type::solid,
+						mac_grid::cell::type::solid,
+						mac_grid::cell::type::solid
+					);
+					std::size_t pos_flat = grid().grid().index_to_raw(pos);
+					mac_grid::cell &this_cell = grid().grid()[pos_flat];
+					vec_ops::for_each(
+						[&](std::size_t dim) {
+							if (pos[dim] > 0) {
+								vec3s neg = pos;
+								--neg[dim];
+								if (valid(neg) != 0) {
+									const mac_grid::cell &neg_cell = grid().grid()(neg);
+									neighbor_vels += neg_cell.velocities_posface;
+									++valid_neighbors;
+								}
+							}
+							if (pos[dim] + 1 < grid().grid().get_size()[dim]) {
+								vec3s pospos = pos;
+								++pospos[dim];
+								if (valid(pospos) != 0) {
+									const mac_grid::cell &pos_cell = grid().grid()(pospos);
+									neighbor_vels += pos_cell.velocities_posface;
+									type_pos[dim] = pos_cell.cell_type;
+									++valid_neighbors;
+								}
+							}
+						},
+						vec3s(0, 1, 2)
+							);
+					if (valid_neighbors > 0) {
+						vec_ops::for_each(
+							[&](std::size_t dim) {
+								if (this_cell.cell_type == type_pos[dim]) {
+									this_cell.velocities_posface[dim] =
+										neighbor_vels[dim] / static_cast<double>(valid_neighbors);
+								}
+							},
+							vec3s(0, 1, 2)
+								);
+						new_valid_cells.emplace_back(pos_flat);
+					}
+				}
+			);
 		}
 	}
 

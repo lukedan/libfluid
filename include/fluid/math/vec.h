@@ -266,39 +266,41 @@ namespace fluid {
 				return vec_ops::apply<Derived>(std::negate(), lhs);
 			}
 
-			/// In-place division.
-			template <typename Dummy = void> FLUID_FORCEINLINE _valid_for_floating_point_t<
-				Derived&, Dummy
-			> operator/=(const T &rhs) {
-				vec_ops::apply_to(
-					*_derived(), [&](const T &lhs) {
-						return lhs / rhs;
+			/// In-place scalar division.
+			template <typename U> FLUID_FORCEINLINE Derived &operator/=(const U &rhs) {
+				vec_ops::for_each(
+					[&](T &lhs) {
+						lhs /= rhs;
 					}, *_derived()
 						);
 				return *_derived();
 			}
-			/// Division.
-			template <typename Dummy = void> FLUID_FORCEINLINE [[nodiscard]] friend _valid_for_floating_point_t<
-				Derived, Dummy
-			> operator/(Derived lhs, const T &rhs) {
+			/// Scalar division.
+			template <typename U> FLUID_FORCEINLINE [[nodiscard]] friend Derived operator/(
+				Derived lhs, const U &rhs
+			) {
 				return lhs /= rhs;
 			}
 
-			/// In-place multiplication.
-			FLUID_FORCEINLINE Derived &operator*=(const T &rhs) {
-				vec_ops::apply_to(
-					*_derived(), [&](const T &lhs) {
-						return lhs * rhs;
+			/// In-place scalar multiplication.
+			template <typename U> FLUID_FORCEINLINE Derived &operator*=(const U &rhs) {
+				vec_ops::for_each(
+					[&](T &lhs) {
+						lhs *= rhs;
 					}, *_derived()
 						);
 				return *_derived();
 			}
-			/// Multiplication.
-			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(Derived lhs, const T &rhs) {
+			/// Scalar multiplication.
+			template <typename U> FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(
+				Derived lhs, const U &rhs
+			) {
 				return lhs *= rhs;
 			}
-			/// Multiplication.
-			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(const T &lhs, Derived rhs) {
+			/// Scalar multiplication.
+			template <typename U> FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(
+				const U &lhs, Derived rhs
+			) {
 				return rhs *= lhs;
 			}
 
