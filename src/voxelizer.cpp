@@ -6,82 +6,9 @@
 #include <algorithm>
 #include <stack>
 
+#include "fluid/math/intersection.h"
+
 namespace fluid {
-	// https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/pubs/tribox.pdf
-	bool voxelizer::box_triangle_overlap(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
-		p1 -= box_center;
-		p2 -= box_center;
-		p3 -= box_center;
-
-		auto [xmin, xmax] = std::minmax({ p1.x, p2.x, p3.x });
-		if (xmin > half_extent.x || xmax < half_extent.x) {
-			return false;
-		}
-		auto [ymin, ymax] = std::minmax({ p1.y, p2.y, p3.y });
-		if (ymin > half_extent.y || ymax < half_extent.y) {
-			return false;
-		}
-		auto [zmin, zmax] = std::minmax({ p1.z, p2.z, p3.z });
-		if (zmin > half_extent.z || zmax < half_extent.z) {
-			return false;
-		}
-
-		return _box_triangle_overlap_no_aabb_center(half_extent, p1, p2, p3);
-	}
-
-	bool voxelizer::box_triangle_overlap_no_aabb(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
-		p1 -= box_center;
-		p2 -= box_center;
-		p3 -= box_center;
-		return _box_triangle_overlap_no_aabb_center(half_extent, p1, p2, p3);
-	}
-
-	bool voxelizer::_box_triangle_overlap_no_aabb_center(vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
-		vec3d f[]{ p2 - p1, p3 - p2, p1 - p3 }, normal = vec_ops::cross(f[0], f[1]);
-		double
-			center_off = vec_ops::dot(p1, normal),
-			radius_n = vec_ops::dot(
-				vec_ops::apply<vec3d>(static_cast<double (*)(double)>(std::abs), normal), half_extent
-			);
-		if (std::abs(center_off) > std::abs(radius_n)) {
-			return false;
-		}
-
-		vec3d v[]{ p1, p2, p3 };
-		// (1, 0, 0) -> (0, -z, y)
-		for (std::size_t i = 0; i < 3; ++i) {
-			vec3d v1 = v[i], v2 = v[(i + 2) % 3], fi = f[i];
-			double p0 = v1.z * fi.y - v1.y * fi.z, p1 = v2.z * fi.y - v2.y * fi.z;
-			auto [pmin, pmax] = std::minmax(p0, p1);
-			double r = half_extent.y * std::abs(fi.z) + half_extent.z * std::abs(fi.y);
-			if (pmin > r || pmax < -r) {
-				return false;
-			}
-		}
-		// (0, 1, 0) -> (z, 0, -x)
-		for (std::size_t i = 0; i < 3; ++i) {
-			vec3d v1 = v[i], v2 = v[(i + 2) % 3], fi = f[i];
-			double p0 = v1.x * fi.z - v1.z * fi.x, p1 = v2.x * fi.z - v2.z * fi.x;
-			auto [pmin, pmax] = std::minmax(p0, p1);
-			double r = half_extent.x * std::abs(fi.z) + half_extent.z * std::abs(fi.x);
-			if (pmin > r || pmax < -r) {
-				return false;
-			}
-		}
-		// (0, 0, 1) -> (-y, x, 0)
-		for (std::size_t i = 0; i < 3; ++i) {
-			vec3d v1 = v[i], v2 = v[(i + 2) % 3], fi = f[i];
-			double p0 = v1.y * fi.x - v1.x * fi.y, p1 = v2.y * fi.x - v2.x * fi.y;
-			auto [pmin, pmax] = std::minmax(p0, p1);
-			double r = half_extent.x * std::abs(fi.y) + half_extent.y * std::abs(fi.x);
-			if (pmin > r || pmax < -r) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
 	void voxelizer::resize_reposition_grid(vec3d min, vec3d max) {
 		vec3d
 			size = max - min,

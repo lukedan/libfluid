@@ -20,15 +20,6 @@ namespace fluid {
 			surface ///< The cell intersects with the surface of the mesh.
 		};
 
-		/// Tests if the given axis-aligned box overlaps the given triangle.
-		[[nodiscard]] static bool box_triangle_overlap(
-			vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3
-		);
-		/// Tests if the given axis-aligned box overlaps the given triangle, assuming that the box overlaps with the
-		/// triangle's AABB.
-		[[nodiscard]] static bool box_triangle_overlap_no_aabb(
-			vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3
-		);
 		/// Returns the bounding box of the given list of vertices.
 		template <typename It> inline static std::pair<vec3d, vec3d> get_bounding_box(It beg, It end) {
 			if (beg == end) {
@@ -80,10 +71,6 @@ namespace fluid {
 		grid3<cell_type> voxels; ///< The voxels.
 		vec3d grid_offset; ///< The offset of \ref voxels.
 	private:
-		/// Tests if the given axis-aligned box overlaps the given triangle, assuming that the box's center is at
-		/// the origin and that the box overlaps with the triangle's AABB.
-		static bool _box_triangle_overlap_no_aabb_center(vec3d half_extent, vec3d p1, vec3d p2, vec3d p3);
-
 		/// Updates the bounding box.
 		static void _update_bounding_box(vec3d pos, vec3d &min, vec3d &max);
 	};

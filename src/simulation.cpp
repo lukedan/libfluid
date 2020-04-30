@@ -690,7 +690,7 @@ namespace fluid {
 
 		std::vector<std::size_t> new_valid_cells;
 
-		for (std::size_t i = 0; i < 1; ++i) {
+		for (std::size_t i = 0; i < velocity_extrapolation_iterations; ++i) {
 			// update valid cells
 			for (std::size_t cell : new_valid_cells) {
 				valid[cell] = 1;

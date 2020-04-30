@@ -26,6 +26,7 @@ target_sources(fluid
 	PRIVATE
 		"src/data_structures/point_cloud.cpp"
 		"src/data_structures/obstacle.cpp"
+		"src/math/intersection.cpp"
 		"src/mac_grid.cpp"
 		"src/mesher.cpp"
 		"src/pressure_solver.cpp"

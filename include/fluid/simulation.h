@@ -186,6 +186,7 @@ namespace fluid {
 			density = 1.0, ///< The density of the fluid.
 			boundary_skin_width = 0.1, ///< The "skin width" at boundaries to prevent particles from "sticking".
 			correction_stiffness = 5.0; ///< The stiffness used when correcting particle positions.
+		std::size_t velocity_extrapolation_iterations = 1; ///< The number of velocity extrapolation iterations.
 		method simulation_method = method::apic; ///< The simulation method.
 	private:
 		/// Information about all particles in a cell.
