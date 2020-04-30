@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.9)
 project(libfluid)
 
 set(FLUID_USE_OPENMP ON CACHE BOOL "Whether or not to use OpenMP.")
+set(FLUID_BUILD_RENDERER ON CACHE BOOL "Whether or not to build the renderer.")
 set(FLUID_BUILD_TESTBED ON CACHE BOOL "Whether or not to build the testbed.")
 set(FLUID_BUILD_MAYA_PLUGIN ON CACHE BOOL "Whether or not to build the Maya plugin.")
 set(FLUID_MAYA_DEVKIT_PATH "" CACHE PATH "Path to the Maya devkit.")
@@ -32,6 +33,11 @@ target_sources(fluid
 		"src/pressure_solver.cpp"
 		"src/simulation.cpp"
 		"src/voxelizer.cpp")
+if(FLUID_BUILD_RENDERER)
+	target_sources(fluid
+		PRIVATE
+			"src/renderer/primitive.cpp" "src/renderer/aabb_tree.cpp")
+endif()
 if(MSVC)
 	target_compile_options(fluid PUBLIC /arch:AVX2)
 endif()
