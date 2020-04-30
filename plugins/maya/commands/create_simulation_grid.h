@@ -5,6 +5,7 @@
 
 #include <maya/MPxCommand.h>
 #include <maya/MDGModifier.h>
+#include <maya/MDagModifier.h>
 
 namespace fluid::maya {
 	/// A command that creates a simulation grid node and a mesher node.
@@ -27,6 +28,7 @@ namespace fluid::maya {
 			return true;
 		}
 	private:
-		MDGModifier _graph_modifier; ///< Used to create nodes and links.
+		MDGModifier _graph_modifier_dg; ///< Used to create DG nodes and links.
+		MDagModifier _graph_modifier; ///< Used to create DAG nodes and links.
 	};
 }

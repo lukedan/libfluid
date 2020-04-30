@@ -9,7 +9,7 @@
 
 namespace fluid::maya {
 	/// Draw override for \ref grid_node.
-	class grid_manipulator_node : public MPxLocatorNode {
+	class grid_locator_node : public MPxLocatorNode {
 	public:
 		static MObject
 			attr_cell_size, ///< The cell size attribute.
@@ -25,5 +25,7 @@ namespace fluid::maya {
 		static void *creator();
 		/// Initialization function passed to \p MFnPlugin::registerNode().
 		static MStatus initialize();
+	private:
+		std::tuple<vec3d, double, vec3i> grid_locator_node::_get_grid_attributes() const;
 	};
 }

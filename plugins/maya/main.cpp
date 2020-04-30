@@ -9,7 +9,7 @@
 #include <maya/MDrawRegistry.h>
 
 #include "misc.h"
-#include "nodes/grid_manipulator_node.h"
+#include "nodes/grid_locator_node.h"
 #include "nodes/grid_node.h"
 #include "nodes/mesher_node.h"
 #include "nodes/point_cloud_loader_node.h"
@@ -25,7 +25,7 @@ namespace fluid::maya {
 		mesher_node::id{ 0x98765433 },
 		point_cloud_loader_node::id{ 0x98765434 },
 		voxelizer_node::id{ 0x98765435 },
-		grid_manipulator_node::id{ 0x98765436 };
+		grid_locator_node::id{ 0x98765436 };
 
 	const MString
 		create_simulation_grid_command::name{ "libfluidCreateSimulationGrid" },
@@ -72,9 +72,9 @@ MStatus initializePlugin(MObject obj) {
 	);
 	FLUID_MAYA_CHECK_RETURN(
 		plugin.registerNode(
-			"GridNodeManip", fluid::maya::grid_manipulator_node::id,
-			fluid::maya::grid_manipulator_node::creator, fluid::maya::grid_manipulator_node::initialize,
-			MPxNode::kManipContainer
+			"GridLocatorNode", fluid::maya::grid_locator_node::id,
+			fluid::maya::grid_locator_node::creator, fluid::maya::grid_locator_node::initialize,
+			MPxNode::kLocatorNode
 		),
 		"node registration"
 	);
@@ -147,7 +147,7 @@ MStatus uninitializePlugin(MObject obj) {
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::mesher_node::id), "node deregisteration");
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::point_cloud_loader_node::id), "node deregisteration");
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::grid_node::id), "node deregistration");
-	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::grid_manipulator_node::id), "node deregistration");
+	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::grid_locator_node::id), "node deregistration");
 	FLUID_MAYA_CHECK_RETURN(plugin.deregisterNode(fluid::maya::voxelizer_node::id), "node deregistration");
 
 	FLUID_MAYA_CHECK_RETURN(

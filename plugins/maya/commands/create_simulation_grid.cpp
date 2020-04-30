@@ -12,7 +12,7 @@
 
 #include "../misc.h"
 #include "../nodes/grid_node.h"
-#include "../nodes/grid_manipulator_node.h"
+#include "../nodes/grid_locator_node.h"
 #include "../nodes/mesher_node.h"
 
 namespace fluid::maya {
@@ -23,12 +23,20 @@ namespace fluid::maya {
 	MStatus create_simulation_grid_command::doIt(const MArgList &args) {
 		MStatus stat;
 
-		MObject grid = _graph_modifier.createNode(grid_node::id, &stat);
+		MObject grid = _graph_modifier.MDGModifier::createNode(grid_node::id, &stat);
 		FLUID_MAYA_CHECK(stat, "node creation");
 
-		MObject mesher = _graph_modifier.createNode(mesher_node::id, &stat);
+		MObject mesher = _graph_modifier.MDGModifier::createNode(mesher_node::id, &stat);
 		FLUID_MAYA_CHECK(stat, "node creation");
+
+		/*FLUID_MAYA_CHECK_RETURN(_graph_modifier_dg.doIt(), "execute queued operations");*/
+
 		MFnDependencyNode fn_mesher(mesher, &stat);
+		FLUID_MAYA_CHECK(stat, "plug retrieval");
+
+		MObject locator = _graph_modifier.createNode(grid_locator_node::id, MObject::kNullObj, &stat);
+		FLUID_MAYA_CHECK(stat, "node creation");
+		MFnDagNode fn_locator(locator, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
 
 		// time -> grid
@@ -63,6 +71,36 @@ namespace fluid::maya {
 			"attribute connection"
 		);
 
+		// grid -> locator
+		FLUID_MAYA_CHECK_RETURN(
+			_graph_modifier.connect(
+				grid, grid_node::attr_cell_size,
+				locator, grid_locator_node::attr_cell_size
+			),
+			"attribute connection"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			_graph_modifier.connect(
+				grid, grid_node::attr_grid_offset,
+				locator, grid_locator_node::attr_grid_offset
+			),
+			"attribute connection"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			_graph_modifier.connect(
+				grid, grid_node::attr_grid_size,
+				locator, grid_locator_node::attr_grid_size
+			),
+			"attribute connection"
+		);
+		FLUID_MAYA_CHECK_RETURN(
+			_graph_modifier.connect(
+				grid, grid_node::attr_output_particle_positions,
+				locator, grid_locator_node::attr_particle_positions
+			),
+			"attribute connection"
+		);
+
 		// mesher -> mesh
 		MPlug mesher_output = fn_mesher.findPlug(mesher_node::attr_output_mesh, false, &stat);
 		FLUID_MAYA_CHECK(stat, "plug retrieval");
@@ -88,10 +126,12 @@ namespace fluid::maya {
 	}
 
 	MStatus create_simulation_grid_command::undoIt() {
-		return _graph_modifier.undoIt();
+		FLUID_MAYA_CHECK_RETURN(_graph_modifier.undoIt(), "undo");
+		return MStatus::kSuccess;
 	}
 
 	MStatus create_simulation_grid_command::redoIt() {
-		return _graph_modifier.doIt();
+		FLUID_MAYA_CHECK_RETURN(_graph_modifier.doIt(), "redo");
+		return MStatus::kSuccess;
 	}
 }

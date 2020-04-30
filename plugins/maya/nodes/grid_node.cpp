@@ -48,8 +48,6 @@ namespace fluid::maya {
 	MStatus grid_node::initialize() {
 		MStatus stat;
 
-		FLUID_MAYA_CHECK_RETURN(MPxManipContainer::addToManipConnectTable(id), "register manipulator");
-
 		// create attributes
 		MFnUnitAttribute time;
 		attr_time = time.create("time", "t", MTime(0.0), &stat);
