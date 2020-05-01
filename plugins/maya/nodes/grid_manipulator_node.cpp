@@ -1,4 +1,4 @@
-#include "grid_locator_node.h"
+#include "grid_manipulator_node.h"
 
 /// \file
 /// Implementation of the grid manipulator node.
@@ -72,7 +72,7 @@ namespace fluid::maya {
 
 		ui.beginDrawable();
 		for (vec3d pt : _particles) {
-			ui.sphere(MPoint(pt.x, pt.y, pt.z), 0.1, true);
+			ui.point(MPoint(pt.x, pt.y, pt.z));
 		}
 		ui.endDrawable();
 	}
