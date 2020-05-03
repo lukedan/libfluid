@@ -230,7 +230,7 @@ namespace fluid::maya {
 		const int3 &ref_grid_size = ref_grid_size_data.asInt3();
 		bool include_interior = include_interior_data.asBool(), include_surface = include_surface_data.asBool();
 
-		mesh<double, vec4d, double, int> vox_mesh;
+		mesh<double, int, double, double, vec3d> vox_mesh;
 		{ // vertices
 			std::size_t num_verts = static_cast<std::size_t>(input_mesh.numVertices(&stat));
 			FLUID_MAYA_CHECK(stat, "retrieve mesh");

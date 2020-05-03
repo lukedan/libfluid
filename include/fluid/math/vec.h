@@ -157,7 +157,7 @@ namespace fluid {
 		///
 		/// \sa vec
 		template <std::size_t N, typename T, typename Derived> struct vec_base {
-			static_assert(N >= 2, "only vectors in two dimensions or above are allowed");
+			static_assert(N >= 1, "empty vectors are not allowed");
 
 			constexpr static std::size_t dimensionality = N; ///< The dimensionality of this vector.
 			using value_type = T; ///< The value type.
@@ -492,6 +492,9 @@ namespace fluid {
 		/// Conversion.
 		template <typename Other> explicit vec(const vec<4, Other> &src) {
 			this->_convert(src);
+		}
+		/// Converts a 3D vector to a 4D vector.
+		vec(const vec<3, T> &v3, const T &v4) : vec(v3.x, v3.y, v3.z, v4) {
 		}
 
 		/// Indexing.

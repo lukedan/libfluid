@@ -28,6 +28,7 @@ target_sources(fluid
 		"src/data_structures/point_cloud.cpp"
 		"src/data_structures/obstacle.cpp"
 		"src/math/intersection.cpp"
+		"src/math/warping.cpp"
 		"src/mac_grid.cpp"
 		"src/mesher.cpp"
 		"src/pressure_solver.cpp"
@@ -36,7 +37,13 @@ target_sources(fluid
 if(FLUID_BUILD_RENDERER)
 	target_sources(fluid
 		PRIVATE
-			"src/renderer/primitive.cpp" "src/renderer/aabb_tree.cpp")
+			"src/renderer/aabb_tree.cpp"
+			"src/renderer/bsdf.cpp"
+			"src/renderer/camera.cpp"
+			"src/renderer/material.cpp"
+			"src/renderer/path_tracer.cpp"
+			"src/renderer/primitive.cpp"
+			"src/renderer/scene.cpp")
 endif()
 if(MSVC)
 	target_compile_options(fluid PUBLIC /arch:AVX2)
@@ -60,7 +67,9 @@ if(FLUID_BUILD_TESTBED)
 	target_compile_features(testbed
 		PRIVATE cxx_std_17)
 	target_sources(testbed
-		PRIVATE "testbed/main.cpp")
+		PRIVATE
+			"testbed/test_scenes.cpp"
+			"testbed/main.cpp")
 
 	find_package(OpenGL REQUIRED)
 	find_package(glfw3 CONFIG REQUIRED)

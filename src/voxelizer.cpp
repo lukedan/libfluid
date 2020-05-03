@@ -70,7 +70,7 @@ namespace fluid {
 				for (std::size_t x = min_id.x; x <= max_id.x; ++x, center.x += cell_size) {
 					cell_type &type = voxels(x, y, z);
 					if (type != cell_type::surface) {
-						if (box_triangle_overlap_no_aabb(center, half_extents, p1, p2, p3)) {
+						if (aab_triangle_overlap_bounded(center, half_extents, p1, p2, p3)) {
 							type = cell_type::surface;
 						}
 					}

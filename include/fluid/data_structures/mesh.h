@@ -9,11 +9,12 @@
 
 namespace fluid {
 	/// A mesh.
-	template <typename PosT, typename ColorT, typename NormalT, typename IndexT> struct mesh {
+	template <typename PosT, typename IndexT, typename NormalT, typename UvT, typename ColorT> struct mesh {
 		std::vector<vec3<PosT>> positions; ///< Vertex positions.
 		std::vector<vec3<NormalT>> normals; ///< Vertex normals.
 		std::vector<IndexT> indices; ///< Triangle indices.
 		std::vector<ColorT> colors; ///< Vertex colors.
+		std::vector<vec2<UvT>> uvs; ///< The UVs.
 
 		/// Clears all data in this mesh.
 		void clear() {
@@ -21,6 +22,7 @@ namespace fluid {
 			normals.clear();
 			indices.clear();
 			colors.clear();
+			uvs.clear();
 		}
 
 		/// Generates normals for all vertices.
@@ -50,16 +52,39 @@ namespace fluid {
 				for (auto &n : normals) {
 					out << "vn " << n.x << " " << n.y << " " << n.z << "\n";
 				}
+			}
+			if (!uvs.empty()) {
+				for (auto &uv : uvs) {
+					out << "vt " << uv.x << " " << uv.y << "\n";
+				}
+			}
+
+			// faces
+			if (normals.empty() && uvs.empty()) {
+				for (std::size_t i = 0; i < indices.size() - 2; i += 3) {
+					out << "f " << indices[i] + 1 << " " << indices[i + 1] + 1 << " " << indices[i + 2] + 1 << "\n";
+				}
+			} else if (normals.empty()) {
 				for (std::size_t i = 0; i < indices.size() - 2; ) {
 					out << "f";
 					for (std::size_t j = 0; j < 3; ++i, ++j) {
-						out << " " << indices[i] + 1 << "//" << indices[i] + 1;
+						IndexT id = indices[i] + 1;
+						out << " " << id << "/" << id;
 					}
 					out << "\n";
 				}
 			} else {
-				for (std::size_t i = 0; i < indices.size() - 2; i += 3) {
-					out << "f " << indices[i] + 1 << " " << indices[i + 1] + 1 << " " << indices[i + 2] + 1 << "\n";
+				for (std::size_t i = 0; i < indices.size() - 2; ) {
+					out << "f";
+					for (std::size_t j = 0; j < 3; ++i, ++j) {
+						IndexT id = indices[i] + 1;
+						out << " " << id << "/";
+						if (!uvs.empty()) {
+							out << id;
+						}
+						out << "/" << id;
+					}
+					out << "\n";
 				}
 			}
 		}

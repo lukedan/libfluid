@@ -9,7 +9,7 @@ namespace fluid {
 	/// A static obstacle.
 	class obstacle {
 	public:
-		using mesh_t = mesh<double, vec3d, double, std::size_t>; ///< The mesh type.
+		using mesh_t = mesh<double, std::size_t, double, double, vec3d>; ///< The mesh type.
 
 		/// Default constructor.
 		obstacle() = default;

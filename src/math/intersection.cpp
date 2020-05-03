@@ -7,7 +7,7 @@
 
 namespace fluid {
 	// https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/pubs/tribox.pdf
-	bool box_triangle_overlap(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
+	bool aab_triangle_overlap(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
 		p1 -= box_center;
 		p2 -= box_center;
 		p3 -= box_center;
@@ -25,17 +25,17 @@ namespace fluid {
 			return false;
 		}
 
-		return box_triangle_overlap_no_aabb_center(half_extent, p1, p2, p3);
+		return aab_triangle_overlap_bounded_center(half_extent, p1, p2, p3);
 	}
 
-	bool box_triangle_overlap_no_aabb(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
+	bool aab_triangle_overlap_bounded(vec3d box_center, vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
 		p1 -= box_center;
 		p2 -= box_center;
 		p3 -= box_center;
-		return box_triangle_overlap_no_aabb_center(half_extent, p1, p2, p3);
+		return aab_triangle_overlap_bounded_center(half_extent, p1, p2, p3);
 	}
 
-	bool box_triangle_overlap_no_aabb_center(vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
+	bool aab_triangle_overlap_bounded_center(vec3d half_extent, vec3d p1, vec3d p2, vec3d p3) {
 		vec3d f[]{ p2 - p1, p3 - p2, p1 - p3 }, normal = vec_ops::cross(f[0], f[1]);
 		double
 			center_off = vec_ops::dot(p1, normal),
@@ -83,38 +83,77 @@ namespace fluid {
 
 
 	// Moller-Trumbore
-	std::optional<vec3d> ray_triangle_intersection(
+	vec3d ray_triangle_intersection(
 		vec3d origin, vec3d direction, vec3d p1, vec3d p2, vec3d p3, double parallel_epsilon
 	) {
 		return ray_triangle_intersection_edges(origin, direction, p1, p2 - p1, p3 - p1, parallel_epsilon);
 	}
 
-	std::optional<vec3d> ray_triangle_intersection_edges(
+	vec3d ray_triangle_intersection_edges(
 		vec3d origin, vec3d direction, vec3d p1, vec3d e12, vec3d e13, double parallel_epsilon
 	) {
 		vec3d pvec = vec_ops::cross(direction, e13);
 		double det = vec_ops::dot(e12, pvec);
 		if (std::abs(det) < parallel_epsilon) { // return if parallel
-			return std::nullopt;
+			return vec3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0);
 		}
 		double inv_det = 1.0 / det;
 
 		vec3d e1o = origin - p1;
 		double u = vec_ops::dot(e1o, pvec) * inv_det;
 		if (u < 0.0 || u > 1.0) {
-			return std::nullopt;
+			return vec3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0);
 		}
 
 		vec3d qvec = vec_ops::cross(e1o, e12);
 		double v = vec_ops::dot(direction, qvec) * inv_det;
 		if (v < 0.0 || u + v > 1.0) {
-			return std::nullopt;
+			return vec3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0);
 		}
 
 		double t = vec_ops::dot(e13, qvec) * inv_det;
 		if (t > 0.0) {
 			return vec3d(t, u, v);
 		}
-		return std::nullopt;
+		return vec3d(std::numeric_limits<double>::quiet_NaN(), 0.0, 0.0);
+	}
+
+
+	// https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection
+	vec2d aab_ray_intersection(vec3d min, vec3d max, vec3d vo, vec3d vd) {
+		double tmin = (min.x - vo.x) / vd.x;
+		double tmax = (max.x - vo.x) / vd.x;
+		if (tmin > tmax) {
+			std::swap(tmin, tmax);
+		}
+
+		double tymin = (min.y - vo.y) / vd.y;
+		double tymax = (max.y - vo.y) / vd.y;
+		if (tymin > tymax) {
+			std::swap(tymin, tymax);
+		}
+
+		if (tmin > tymax || tymin > tmax) {
+			return vec2d(std::numeric_limits<double>::quiet_NaN(), 0.0);
+		}
+
+		tmin = std::max(tmin, tymin);
+		tmax = std::min(tmax, tymax);
+
+		double tzmin = (min.z - vo.z) / vd.z;
+		double tzmax = (max.z - vo.z) / vd.z;
+		if (tzmin > tzmax) {
+			std::swap(tzmin, tzmax);
+		}
+
+		if (tmin > tzmax || tzmin > tmax) {
+			return vec2d(std::numeric_limits<double>::quiet_NaN(), 0.0);
+		}
+		tmin = std::max(tmin, tzmin);
+		tmax = std::min(tmax, tzmax);
+		if (tmax > 0.0) {
+			return vec2d(tmin, tmax);
+		}
+		return vec2d(std::numeric_limits<double>::quiet_NaN(), 0.0);
 	}
 }

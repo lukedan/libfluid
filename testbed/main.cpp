@@ -17,9 +17,16 @@
 #include <fluid/mesher.h>
 #include <fluid/data_structures/point_cloud.h>
 
+#include <fluid/renderer/path_tracer.h>
+
+#include "test_scenes.h"
+
 using fluid::vec2d;
+using fluid::vec2s;
 using fluid::vec3d;
 using fluid::vec3s;
+
+using namespace fluid::renderer;
 
 #define USE_OBSTACLE 1
 
@@ -286,6 +293,31 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			mesh_vis = static_cast<mesh_visualize_mode>(static_cast<unsigned char>(mesh_vis) + 1);
 			if (mesh_vis == mesh_visualize_mode::maximum) {
 				mesh_vis = mesh_visualize_mode::none;
+			}
+			break;
+
+		case GLFW_KEY_F5:
+			{
+				auto [scene, cam] = cornell_box();
+				path_tracer tracer;
+				auto img = tracer.render(scene, cam, vec2s(400, 400));
+				img.save_ppm(
+					"test.ppm",
+					[](std::ostream &out, spectrum pixel) {
+						vec3d rgb = pixel.rgb;
+						rgb *= 255.0;
+						fluid::vec_ops::for_each(
+							[](double &v) {
+								v = std::clamp(v, 0.0, 255.0);
+							},
+							rgb
+								);
+						out <<
+							static_cast<int>(rgb.x) << " " <<
+							static_cast<int>(rgb.y) << " " <<
+							static_cast<int>(rgb.z);
+					}
+				);
 			}
 			break;
 

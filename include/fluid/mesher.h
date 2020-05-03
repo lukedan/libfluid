@@ -15,7 +15,7 @@ namespace fluid {
 	class mesher {
 	public:
 		/// The mesh type.
-		using mesh_t = mesh<double, std::uint8_t, double, std::size_t>;
+		using mesh_t = mesh<double, std::size_t, double, double, vec3d>;
 
 		/// Resizes the sampling grid. This is counted in the number of cells, so \ref _surface_function will have
 		/// one more coordinate on each dimension.

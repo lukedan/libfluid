@@ -6,40 +6,89 @@
 #include <variant>
 
 #include "fluid/math/vec.h"
+#include "fluid/math/mat.h"
+#include "fluid/math/intersection.h"
 #include "fluid/renderer/common.h"
 
 namespace fluid::renderer {
-	/// A triangle primitive.
-	struct triangle_primitive {
-		vec3d points[3]; ///< Three vertices of this triangle.
+	struct entity_info;
 
-		/// Returns the bounding box.
-		[[nodiscard]] aabb3d get_bounding_box() const {
-			return aabb3d::containing(points[0], points[1], points[2]);
+	/// Stores the resutls of a ray cast operation.
+	struct ray_cast_result {
+		double t = 0.0; ///< The \p t value of the ray. If the ray cast didn't hit, then this value will be \p nan.
+		double custom[3]{}; ///< Custom data used by each primitive type.
+
+		/// Returns whether this ray cast is a hit.
+		bool is_hit() const {
+			return !std::isnan(t);
 		}
 	};
-	/// A sphere primitive.
-	struct sphere_primitive {
-		[[nodiscard]] aabb3d get_bounding_box() const {
 
-		}
-	};
+	/// Definition of different types of primitives.
+	namespace primitives {
+		/// A triangle primitive.
+		struct triangle_primitive {
+			vec3d
+				point1, ///< The first vertex of this triangle.
+				edge12, ///< Edge from the first vertex to the second vertex.
+				edge13, ///< Edge from the first vertex to the third vertex.
+				geometric_normal; ///< The geometric normal of this triangle.
+			vec2d
+				uv_p1, ///< The UV of \ref point1.
+				uv_e12, ///< The UV difference of \ref edge12.
+				uv_e13; ///< The UV difference of \ref edge13.
+
+			/// Returns the bounding box.
+			[[nodiscard]] aab3d get_bounding_box() const;
+			/// Returns the result of \ref ray_triangle_intersection_edges().
+			[[nodiscard]] ray_cast_result ray_cast(const ray&) const;
+			/// Returns \ref tangent.
+			[[nodiscard]] vec3d get_geometric_normal(ray_cast_result) const;
+			/// Returns the UV at the given intersection.
+			[[nodiscard]] vec2d get_uv(ray_cast_result) const;
+
+			/// Computes the normal of this triangle.
+			void compute_geometric_normal();
+		};
+		/// A sphere primitive.
+		struct sphere_primitive {
+			[[nodiscard]] aab3d get_bounding_box() const {
+				// TODO
+				std::abort();
+			}
+			[[nodiscard]] ray_cast_result ray_cast(const ray &r) const {
+				// TODO
+				std::abort();
+			}
+			[[nodiscard]] vec3d get_geometric_normal(ray_cast_result r) const {
+				// TODO
+				std::abort();
+			}
+			[[nodiscard]] vec2d get_uv(ray_cast_result r) const {
+				// TODO
+				std::abort();
+			}
+		};
+	}
 
 	/// A generic primitive.
 	struct primitive {
 		/// The union used store the primitive.
-		using union_t = std::variant<triangle_primitive, sphere_primitive>;
+		using union_t = std::variant<
+			primitives::triangle_primitive,
+			primitives::sphere_primitive
+		>;
 
-		/// Returns the bounding box of this primitive.
-		[[nodiscard]] aabb3d get_bounding_box() const {
-			return std::visit(
-				[](const auto &prim) {
-					return prim.get_bounding_box();
-				},
-				value
-					);
-		}
+		/// Forwards the call to underlying primitive types.
+		[[nodiscard]] aab3d get_bounding_box() const;
+		/// Performs ray casting.
+		[[nodiscard]] ray_cast_result ray_cast(const ray&) const;
+		/// Returns an orthonormal matrix that converts from world space directions to tangent space directions.
+		[[nodiscard]] vec3d get_geometric_normal(ray_cast_result) const;
+		/// Returns the UV at the given intersection.
+		[[nodiscard]] vec2d get_uv(ray_cast_result) const;
 
 		union_t value; ///< The value of this primitive.
+		entity_info *entity = nullptr; ///< The entity associated with this primitive.
 	};
 }
