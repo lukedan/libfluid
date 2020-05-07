@@ -47,6 +47,14 @@ namespace fluid::renderer {
 		}
 	}
 
+	void scene::add_primitive_entity(const primitive::union_t &geom, entity_info i) {
+		entity_info &ent = _entities.emplace_back(std::move(i));
+		primitive prim;
+		prim.value = geom;
+		prim.entity = &ent;
+		_tree.add_primitive(prim);
+	}
+
 	void scene::finish() {
 		_tree.build();
 	}

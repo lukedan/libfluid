@@ -6,8 +6,22 @@
 #include <stack>
 
 namespace fluid::renderer {
+	aabb_tree::aabb_tree(aabb_tree &&src) noexcept :
+		_node_pool(std::move(src._node_pool)),
+		_primitive_pool(std::move(src._primitive_pool)),
+		_root(src._root) {
+	}
+
+	aabb_tree &aabb_tree::operator=(aabb_tree &&src) noexcept {
+		_node_pool = std::move(src._node_pool);
+		_primitive_pool = std::move(src._primitive_pool);
+		_root = src._root;
+		return *this;
+	}
+
 	void aabb_tree::add_primitive(primitive prim) {
-		assert(_node_pool.empty());
+		_node_pool.clear();
+		_root = nullptr;
 		_primitive_pool.emplace_back(std::move(prim));
 	}
 

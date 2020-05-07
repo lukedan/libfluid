@@ -86,6 +86,23 @@ namespace fluid {
 		}
 
 
+		namespace _details {
+			/// Implementation of \ref slice().
+			template <std::size_t Offset, typename Out, std::size_t ...Is, typename In> Out slice_impl(
+				const In &in, std::index_sequence<Is...>
+			) {
+				return Out(in[Is + Offset]...);
+			}
+		}
+		/// Returns the desired slice of the input vector.
+		template <
+			std::size_t Begin, std::size_t End, std::size_t Len, typename T,
+			template <std::size_t, typename> typename Vec
+		> [[nodiscard]] inline Vec<End - Begin, T> slice(const Vec<Len, T> &v) {
+			return _details::slice_impl<Begin, Vec<End - Begin, T>>(v, std::make_index_sequence<End - Begin>());
+		}
+
+
 		/// Dot product.
 		template <typename Vec> [[nodiscard]] FLUID_FORCEINLINE typename Vec::value_type dot(
 			const Vec &lhs, const Vec &rhs
@@ -226,6 +243,7 @@ namespace fluid {
 			}
 
 
+		public:
 			// pretend that this is a std::vector
 			constexpr inline static std::size_t size() {
 				return dimensionality;

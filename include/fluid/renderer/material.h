@@ -36,12 +36,33 @@ namespace fluid::renderer {
 			/// Returns a \ref bsdfs::lambertian_reflection_brdf.
 			bsdf get_bsdf(vec2d) const;
 		};
+
+		/// Specular reflection material.
+		struct specular_reflection {
+			channel<spectrum> reflectance; ///< Reflectance.
+
+			/// Returns a \ref bsdfs::specular_reflection_brdf.
+			bsdf get_bsdf(vec2d) const;
+		};
+
+		/// Specular transmission material.
+		struct specular_transmission {
+			/// The color used for both reflection and transmission.
+			channel<spectrum> skin;
+			double index_of_refraction = 1.0; ///< The index of refraction of this material.
+
+			bsdf get_bsdf(vec2d) const;
+		};
 	}
 
 	/// A generic material.
 	struct material {
 		/// The \p std::variant used to store the material.
-		using union_t = std::variant<materials::lambertian_reflection>;
+		using union_t = std::variant<
+			materials::lambertian_reflection,
+			materials::specular_reflection,
+			materials::specular_transmission
+		>;
 
 		/// Returns a BSDF that corresponds to the given UV coordinates. The UV coordinates are assumed to be within
 		/// [0, 1]. \ref bsdf::emission is set by this function, while \ref bsdf::value is set by the underlying

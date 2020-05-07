@@ -40,6 +40,7 @@ if(FLUID_BUILD_RENDERER)
 			"src/renderer/aabb_tree.cpp"
 			"src/renderer/bsdf.cpp"
 			"src/renderer/camera.cpp"
+			"src/renderer/fresnel.cpp"
 			"src/renderer/material.cpp"
 			"src/renderer/path_tracer.cpp"
 			"src/renderer/primitive.cpp"

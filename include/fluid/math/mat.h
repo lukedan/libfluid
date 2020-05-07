@@ -23,8 +23,15 @@ namespace fluid {
 
 		/// Zero-initializes this matrix.
 		rmat() = default;
+	private:
 		/// Directly initializes this matrix from the storage.
 		explicit rmat(const storage_type &mat_rows) : rows(mat_rows) {
+		}
+
+	public:
+		/// Creates a new \ref rmat from its rows.
+		template <typename ...Args> [[nodiscard]] inline static rmat from_rows(Args &&...args) {
+			return rmat(storage_type(std::forward<Args>(args)...));
 		}
 
 		/// Returns the identity matrix.
@@ -180,31 +187,35 @@ namespace fluid {
 		}
 
 	private:
+		/// Shorthand for \p std::enable_if_t.
+		template <bool Enable, typename U, typename Dummy> using _enable_if_t =
+			std::enable_if_t<Enable == std::is_same_v<Dummy, void>, U>;
 		/// \p std::enable_if_t for square matrices.
-		template <typename U, typename Dummy> using _enable_if_square_t =
-			std::enable_if_t<is_square == std::is_same_v<Dummy, void>, U>;
+		template <typename U, typename Dummy> using _enable_if_square_t = _enable_if_t<is_square, U, Dummy>;
 	public:
 		/// Calculates the determinant of this matrix.
 		template <typename Dummy = void> _enable_if_square_t<T, Dummy> get_determinant() const {
 			if constexpr (W == 1) {
 				return rows[0][0];
+			} else {
+				if constexpr (W == 2) { // termination condition
+					return rows[0][0] * rows[1][1] - rows[0][1] * rows[1][0];
+				} else {
+					T result = static_cast<T>(0);
+					bool positive = true;
+					std::size_t rid = 0;
+					vec_ops::for_each(
+						[&](const row_type &row) {
+							T value = rows[rid][0] * get_submatrix_minor(rid, 0).get_determinant();
+							result = positive ? result + value : result - value;
+							++rid;
+							positive = !positive;
+						},
+						rows
+							);
+					return result;
+				}
 			}
-			if constexpr (W == 2) { // termination condition
-				return rows[0][0] * rows[1][1] - rows[0][1] * rows[1][0];
-			}
-			T result = static_cast<T>(0);
-			bool positive = true;
-			std::size_t rid = 0;
-			vec_ops::for_each(
-				[this, &](const row_type &row) {
-					T value = rows[rid][0] * get_submatrix_minor(rid, 0).get_determinant();
-					result = positive ? result + value : result - value;
-					++rid;
-					positive = !positive;
-				},
-				rows
-					);
-			return result;
 		}
 
 		/// Calculates the inverse matrix.
@@ -214,7 +225,7 @@ namespace fluid {
 			std::size_t rid = 0;
 			bool rinv = false;
 			vec_ops::for_each(
-				[this, &](row_type &row) {
+				[&](row_type &row) {
 					std::size_t cid = 0;
 					bool cinv = rinv;
 					vec_ops::for_each(

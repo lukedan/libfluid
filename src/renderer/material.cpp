@@ -14,6 +14,23 @@ namespace fluid::renderer {
 			lambert.reflectance = reflectance.get_value_unit(uv);
 			return result;
 		}
+
+
+		bsdf specular_reflection::get_bsdf(vec2d uv) const {
+			bsdf result;
+			auto &specular = result.value.emplace<bsdfs::specular_reflection_brdf>();
+			specular.reflectance = reflectance.get_value_unit(uv);
+			return result;
+		}
+
+
+		bsdf specular_transmission::get_bsdf(vec2d uv) const {
+			bsdf result;
+			auto &specular = result.value.emplace<bsdfs::specular_transmission_bsdf>();
+			specular.skin = skin.get_value_unit(uv);
+			specular.index_of_refraction = index_of_refraction;
+			return result;
+		}
 	}
 
 

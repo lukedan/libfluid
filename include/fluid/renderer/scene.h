@@ -38,8 +38,10 @@ namespace fluid::renderer {
 	public:
 		using mesh_t = mesh<double, std::size_t, double, double, vec3d>; ///< Mesh type.
 
-		/// Adds a mesh entity to the scene.
+		/// Adds a transformed mesh entity to the scene.
 		void add_mesh_entity(const mesh_t&, const rmat3x4d&, entity_info);
+		/// Adds a primitive to the scene.
+		void add_primitive_entity(const primitive::union_t&, entity_info);
 		/// Finishes building the scene.
 		void finish();
 
@@ -48,5 +50,6 @@ namespace fluid::renderer {
 	private:
 		aabb_tree _tree; ///< The AABB tree.
 		std::deque<entity_info> _entities; ///< Information about all entities.
+		std::vector<const primitive*> _lights; ///< The list of light sources.
 	};
 }

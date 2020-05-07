@@ -8,6 +8,7 @@
 #include "fluid/math/vec.h"
 #include "fluid/math/mat.h"
 #include "fluid/math/intersection.h"
+#include "fluid/data_structures/aab.h"
 #include "fluid/renderer/common.h"
 
 namespace fluid::renderer {
@@ -42,7 +43,7 @@ namespace fluid::renderer {
 			[[nodiscard]] aab3d get_bounding_box() const;
 			/// Returns the result of \ref ray_triangle_intersection_edges().
 			[[nodiscard]] ray_cast_result ray_cast(const ray&) const;
-			/// Returns \ref tangent.
+			/// Returns \ref geometric_normal.
 			[[nodiscard]] vec3d get_geometric_normal(ray_cast_result) const;
 			/// Returns the UV at the given intersection.
 			[[nodiscard]] vec2d get_uv(ray_cast_result) const;
@@ -50,24 +51,27 @@ namespace fluid::renderer {
 			/// Computes the normal of this triangle.
 			void compute_geometric_normal();
 		};
-		/// A sphere primitive.
+		/// A sphere primitive. The primitive is a sphere at the origin with radius 1 transformed by the given
+		/// transformation matrix.
 		struct sphere_primitive {
-			[[nodiscard]] aab3d get_bounding_box() const {
-				// TODO
-				std::abort();
-			}
-			[[nodiscard]] ray_cast_result ray_cast(const ray &r) const {
-				// TODO
-				std::abort();
-			}
-			[[nodiscard]] vec3d get_geometric_normal(ray_cast_result r) const {
-				// TODO
-				std::abort();
-			}
-			[[nodiscard]] vec2d get_uv(ray_cast_result r) const {
-				// TODO
-				std::abort();
-			}
+			rmat3d
+				world_to_local, ///< Transforms directions from world coordinates to local coordinates.
+				local_to_world; ///< Transforms directions from world coordinates to local coordinates.
+			vec3d
+				world_to_local_offset, ///< The offset used when transforming from world to local coordinates.
+				local_to_world_offset; ///< The offset used when transforming from local to world coordinates.
+
+			/// Returns the bounding box.
+			[[nodiscard]] aab3d get_bounding_box() const;
+			/// Returns the ray cast result.
+			[[nodiscard]] ray_cast_result ray_cast(const ray&) const;
+			/// Computes the normal at the given intersection.
+			[[nodiscard]] vec3d get_geometric_normal(ray_cast_result) const;
+			/// Computes the UV at the given intersection.
+			[[nodiscard]] vec2d get_uv(ray_cast_result) const;
+
+			/// Sets the transformation of this sphere.
+			void set_transformation(rmat3x4d);
 		};
 	}
 

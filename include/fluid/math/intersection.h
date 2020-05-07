@@ -41,4 +41,9 @@ namespace fluid {
 	///         component will be \p nan. It is possible for the ray to start inside the box, in which case the \p x
 	///         component will be less than zero.
 	[[nodiscard]] vec2d aab_ray_intersection(vec3d min, vec3d max, vec3d vo, vec3d vd);
+
+	/// Computes the intersection between the given ray and a sphere of radius 1 at the origin.
+	///
+	/// \return The return value is similar to that of \ref aab_ray_intersection().
+	[[nodiscard]] vec2d unit_radius_sphere_ray_intersection(vec3d vo, vec3d vd);
 }

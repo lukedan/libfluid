@@ -5,6 +5,7 @@
 
 #include "fluid/math/constants.h"
 #include "fluid/math/warping.h"
+#include "fluid/renderer/fresnel.h"
 
 namespace fluid::renderer {
 	namespace bsdfs {
@@ -15,19 +16,84 @@ namespace fluid::renderer {
 		outgoing_ray_sample lambertian_reflection_brdf::sample_f(vec3d norm_in, vec2d random) const {
 			outgoing_ray_sample result;
 			result.norm_out_direction = warping::unit_hemisphere_from_unit_square_cosine(random);
+			if constexpr (double_sided) {
+				if (norm_in.y < 0.0) {
+					result.norm_out_direction.y = -result.norm_out_direction.y;
+				}
+			}
 			result.pdf = warping::pdf_unit_hemisphere_from_unit_square_cosine(result.norm_out_direction);
 			result.reflectance = f(norm_in, result.norm_out_direction);
-			if (norm_in.y < 0.0) {
-				result.norm_out_direction.y = -result.norm_out_direction.y;
-			}
 			return result;
 		}
 
 		double lambertian_reflection_brdf::pdf(vec3d norm_in, vec3d norm_out) const {
-			if ((norm_in.y > 0) == (norm_out.y > 0)) {
-				norm_out.y = std::abs(norm_out.y);
-				return warping::pdf_unit_hemisphere_from_unit_square_cosine(norm_out);
+			if constexpr (double_sided) {
+				if ((norm_in.y > 0) == (norm_out.y > 0)) {
+					norm_out.y = std::abs(norm_out.y);
+					return warping::pdf_unit_hemisphere_from_unit_square_cosine(norm_out);
+				}
+				return 0.0;
+			} else {
+				return warping::pdf_unit_hemisphere_from_unit_square_cosine(norm_out);;
 			}
+		}
+
+
+		spectrum specular_reflection_brdf::f(vec3d, vec3d) const {
+			return spectrum();
+		}
+
+		outgoing_ray_sample specular_reflection_brdf::sample_f(vec3d norm_in, vec2d random) const {
+			outgoing_ray_sample result;
+			result.norm_out_direction.x = -norm_in.x;
+			result.norm_out_direction.y = norm_in.y;
+			result.norm_out_direction.z = -norm_in.z;
+			result.pdf = 1.0;
+			result.reflectance = reflectance / std::abs(norm_in.y); // cancel out Lambertian term
+			return result;
+		}
+
+		double specular_reflection_brdf::pdf(vec3d norm_in, vec3d norm_out) const {
+			return 0.0;
+		}
+
+
+		spectrum specular_transmission_bsdf::f(vec3d, vec3d) const {
+			return spectrum();
+		}
+
+		outgoing_ray_sample specular_transmission_bsdf::sample_f(vec3d norm_in, vec2d random) const {
+			outgoing_ray_sample result;
+			double eta_in = 1.0, eta_out = index_of_refraction, cos_in = norm_in.y, sign = 1.0;
+			if (cos_in < 0.0) {
+				std::swap(eta_in, eta_out);
+				cos_in = -cos_in;
+				sign = -1.0;
+			}
+			double eta = eta_in / eta_out;
+			double sin2_out = (1.0 - cos_in * cos_in) * eta * eta;
+			if (sin2_out >= 1.0) { // total internal reflection
+				result.norm_out_direction = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
+				result.pdf = 1.0;
+				result.reflectance = skin / cos_in;
+				return result;
+			}
+			double cos_out = std::sqrt(1.0 - sin2_out);
+			double fres = fresnel::dielectric(cos_in, cos_out, eta_in, eta_out);
+			if (random.x > fres) { // refraction
+				result.norm_out_direction = -eta * norm_in;
+				result.norm_out_direction.y += (eta * cos_in - cos_out) * sign;
+				result.pdf = 1.0 - fres;
+				result.reflectance = (1.0 - fres) * skin / cos_out;
+			} else { // reflection
+				result.norm_out_direction = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
+				result.pdf = fres;
+				result.reflectance = fres * skin / cos_in;
+			}
+			return result;
+		}
+
+		double specular_transmission_bsdf::pdf(vec3d norm_in, vec3d norm_out) const {
 			return 0.0;
 		}
 	}

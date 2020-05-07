@@ -34,29 +34,26 @@ namespace fluid::renderer {
 		/// No copy construction.
 		aabb_tree(const aabb_tree&) = delete;
 		/// Move constructor.
-		aabb_tree(aabb_tree &&src) :
-			_node_pool(std::move(src._node_pool)),
-			_primitive_pool(std::move(src._primitive_pool)),
-			_root(src._root) {
-		}
+		aabb_tree(aabb_tree&&) noexcept;
 		/// No copy assignment.
 		aabb_tree &operator=(const aabb_tree&) = delete;
 		/// Move assignment.
-		aabb_tree &operator=(aabb_tree &&src) {
-			_node_pool = std::move(src._node_pool);
-			_primitive_pool = std::move(src._primitive_pool);
-			_root = src._root;
-			return *this;
-		}
+		aabb_tree &operator=(aabb_tree&&) noexcept;
 
-		/// Adds a primitive to the tree. This must be done before the tree is built.
+		/// Adds a primitive to the tree. This function clears \ref _node_pool and \ref _root.
 		void add_primitive(primitive);
 
-		/// Builds the tree. \ref add_primitive() must not be called after this.
+		/// Builds the tree. If \ref add_primitive() is called after this, then this function needs to be called
+		/// again before \ref ray_cast() is called.
 		void build();
 
 		/// Performs ray casting.
 		std::pair<const primitive*, ray_cast_result> ray_cast(const ray&) const;
+
+		/// Returns the list of all primitives.
+		const std::vector<primitive> &get_primitives() const {
+			return _primitive_pool;
+		}
 
 		/// Evaluates the given bounding box to decide whether or not to merge two subtrees. The smaller the
 		/// heuristic is, the better. The default heuristic is based on the surface area of the bounding box.

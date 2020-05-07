@@ -298,26 +298,28 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 
 		case GLFW_KEY_F5:
 			{
-				auto [scene, cam] = cornell_box();
+				std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+				/*auto [scene, cam] = cornell_box();*/
+				auto [scene, cam] = glass_ball_box();
+				scene.finish();
+				std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
 				path_tracer tracer;
 				auto img = tracer.render(scene, cam, vec2s(400, 400));
 				img.save_ppm(
 					"test.ppm",
-					[](std::ostream &out, spectrum pixel) {
-						vec3d rgb = pixel.rgb;
-						rgb *= 255.0;
-						fluid::vec_ops::for_each(
-							[](double &v) {
-								v = std::clamp(v, 0.0, 255.0);
+					[](spectrum pixel) {
+						vec3d rgb = pixel.to_rgb() * 255.0;
+						return fluid::vec_ops::apply<fluid::vec3<std::uint8_t>>(
+							[](double v) {
+								return static_cast<std::uint8_t>(std::clamp(v, 0.0, 255.0));
 							},
 							rgb
 								);
-						out <<
-							static_cast<int>(rgb.x) << " " <<
-							static_cast<int>(rgb.y) << " " <<
-							static_cast<int>(rgb.z);
 					}
 				);
+				std::chrono::high_resolution_clock::time_point t3 = std::chrono::high_resolution_clock::now();
+				std::cout << "build scene: " << std::chrono::duration<double, std::milli>(t2 - t1).count() << "ms\n";
+				std::cout << "render: " << std::chrono::duration<double, std::milli>(t3 - t2).count() << "ms\n";
 			}
 			break;
 

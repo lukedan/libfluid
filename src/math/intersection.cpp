@@ -156,4 +156,22 @@ namespace fluid {
 		}
 		return vec2d(std::numeric_limits<double>::quiet_NaN(), 0.0);
 	}
+
+
+	vec2d unit_radius_sphere_ray_intersection(vec3d vo, vec3d vd) {
+		double sqr_diff_len = vd.squared_length();
+		double mid_t = -vec_ops::dot(vo, vd) / sqr_diff_len;
+		vec3d dist = vo + vd * mid_t;
+		double sqr_dist_len = dist.squared_length();
+		if (sqr_dist_len >= 1.0) { // no intersection
+			return vec2d(std::numeric_limits<double>::quiet_NaN(), 0.0);
+		}
+		double tdiff = std::sqrt((1.0 - sqr_dist_len) / sqr_diff_len);
+		double t1 = mid_t - tdiff, t2 = mid_t + tdiff;
+		if (t2 > 0.0) {
+			return vec2d(t1, t2);
+		}
+		// no intersection
+		return vec2d(std::numeric_limits<double>::quiet_NaN(), 0.0);
+	}
 }

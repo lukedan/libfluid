@@ -7,3 +7,4 @@ fluid::renderer::scene::mesh_t create_plane();
 fluid::renderer::scene::mesh_t create_box();
 
 std::pair<fluid::renderer::scene, fluid::renderer::camera> cornell_box();
+std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box();
