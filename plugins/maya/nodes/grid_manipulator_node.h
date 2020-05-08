@@ -11,11 +11,6 @@ namespace fluid::maya {
 	/// Draw override for \ref grid_node.
 	class grid_manipulator_node : public MPxManipContainer {
 	public:
-		static MObject
-			attr_cell_size, ///< The cell size attribute.
-			attr_grid_size, ///< The grid size attribute.
-			attr_grid_offset, ///< The grid offset attribute.
-			attr_particle_positions; ///< The particle positions attribute.
 		const static MTypeId id; ///< The ID of this node.
 
 		/// Connects this manipulator to the given dependency node.

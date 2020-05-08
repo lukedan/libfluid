@@ -632,7 +632,7 @@ namespace fluid {
 							}
 						}
 						// collision
-						p.velocity[dim] = 0.0;
+						/*p.velocity[dim] = 0.0;*/
 
 						vec3d offset = to - from;
 						t += boundary_skin_width / vec_ops::dot(offset, normal);
