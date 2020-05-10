@@ -44,7 +44,7 @@ namespace fluid::renderer {
 		const primitive *prim = nullptr; ///< The intersected primitive.
 		bool is_delta = false; ///< Indicates whether \ref surface_bsdf is a delta material.
 
-		/// Returns the probability densitu function of the \ref _vertex \p next being sampled by this \ref _vertex
+		/// Returns the probability density function of the \ref _vertex \p next being sampled by this \ref _vertex
 		/// in solid angles.
 		double pdf_from_to(const _vertex &prev, const _vertex &next) const {
 			vec3d
@@ -54,6 +54,17 @@ namespace fluid::renderer {
 			out_norm /= std::sqrt(sqr_out_len); // actually normalize out_norm
 			double pdf = surface_bsdf.pdf(in_norm, out_norm);
 			return _pdf_to_solid_angle_norm_diff(pdf, position, out_norm, sqr_out_len, next.geometric_normal);
+		}
+		/// Returns the probability density function of the next vertex being sampled by this vertex in solid angles,
+		/// if this vertex is a light source.
+		double pdf_light_to(const _vertex &next) const {
+			vec3d offset = next.position - position;
+			double inv_sqr_dist = 1.0 / offset.squared_length();
+			offset *= std::sqrt(inv_sqr_dist);
+			return
+				warping::pdf_unit_hemisphere_from_unit_square() *
+				inv_sqr_dist *
+				std::abs(vec_ops::dot(next.geometric_normal, offset));
 		}
 	};
 
@@ -100,12 +111,13 @@ namespace fluid::renderer {
 				modulate(attenuation, sample.reflectance) *
 				(std::abs(sample.norm_out_direction_tangent.y) / sample.pdf);
 			// calculate pdf
+			vertex.pdf_forward = _pdf_to_solid_angle(
+				prev_pdf, prev_vert.position, vertex.position, isect.geometric_normal
+			);
 			if (vertex.is_delta) {
-				vertex.pdf_forward = prev_vert.pdf_reverse = 0.0;
+				prev_pdf = prev_vert.pdf_reverse = 0.0;
 			} else {
-				vertex.pdf_forward = _pdf_to_solid_angle(
-					prev_pdf, prev_vert.position, vertex.position, isect.geometric_normal
-				);
+				prev_pdf = sample.pdf;
 				double reverse_pdf = isect.surface_bsdf.pdf(
 					sample.norm_out_direction_tangent, incoming_direction_tangent
 				);
@@ -136,7 +148,7 @@ namespace fluid::renderer {
 		/// No copy assignment.
 		_scoped_assignment &operator=(const _scoped_assignment&) = delete;
 		/// Move assignment.
-		_scoped_assignment &operator=(_scoped_assignment &&src) {
+		_scoped_assignment &operator=(_scoped_assignment &&src) noexcept {
 			reset();
 			_old_value = std::move(src._old_value);
 			_target = src._target;
@@ -155,7 +167,7 @@ namespace fluid::renderer {
 			}
 		}
 	private:
-		T _old_value; ///< The old value.
+		T _old_value{}; ///< The old value.
 		T *_target = nullptr; ///< The target.
 	};
 	/// Shorthand for creating \ref _scoped_assignment objects.
@@ -163,31 +175,75 @@ namespace fluid::renderer {
 		return _scoped_assignment<T>(target, std::move(value));
 	}
 
-	/// Returns multiple importance sampling weight of the given path..
+	/// Returns multiple importance sampling weight of the given path. The \p no_light parameter indicates whether
+	/// the entire light path is ignored because the camera path is used for lighting estimation.
 	double _mis_weight(
 		std::vector<_vertex> &cam_path, std::vector<_vertex> &light_path,
-		std::size_t cam_id, std::size_t light_id
+		std::size_t cam_id, std::size_t light_id, std::size_t num_lights, bool no_light
 	) {
 		_vertex
 			&cam_vert = cam_path[cam_id],
 			&prev_cam_vert = cam_path[cam_id - 1],
 			&light_vert = light_path[light_id],
 			*prev_light_vert = light_id > 0 ? &light_path[light_id - 1] : nullptr;
+		double prev_cam_pdf, cam_pdf;
+		if (no_light) {
+			prev_cam_pdf = cam_vert.pdf_light_to(prev_cam_vert);
+			cam_pdf = 1.0 / (static_cast<double>(num_lights) * cam_vert.prim->surface_area());
+		} else {
+			prev_cam_pdf = cam_vert.pdf_from_to(light_vert, prev_cam_vert);
+			if (light_id == 0) {
+				cam_pdf = light_vert.pdf_light_to(cam_vert);
+			} else {
+				cam_pdf = light_vert.pdf_from_to(*prev_light_vert, cam_vert);
+			}
+		}
 		auto
-			sa_cam_vert_pdf_rev = _scoped_assign_to(
-				cam_vert.pdf_reverse, light_vert.pdf_from_to(*prev_light_vert, cam_vert)
-			),
-			sa_prev_cam_vert_pdf_rev = _scoped_assign_to(
-				prev_cam_vert.pdf_reverse, cam_vert.pdf_from_to(light_vert, prev_cam_vert)
-			),
+			sa_prev_cam_vert_pdf_rev = _scoped_assign_to(prev_cam_vert.pdf_reverse, prev_cam_pdf),
+			sa_cam_vert_pdf_rev = _scoped_assign_to(cam_vert.pdf_reverse, cam_pdf),
 			sa_light_vert_pdf_rev = _scoped_assign_to(
 				light_vert.pdf_reverse, cam_vert.pdf_from_to(prev_cam_vert, light_vert)
 			);
+		_scoped_assignment<double> sa_prev_light_vert_pdf_rev;
+		if (prev_light_vert) {
+			sa_prev_light_vert_pdf_rev = _scoped_assign_to(
+				prev_light_vert->pdf_reverse, light_vert.pdf_from_to(cam_vert, *prev_light_vert)
+			);
+		}
 		double sum_ri = 0.0;
-		// camera subpath
-		double ri = 1.0;
-
-		return 1.0;
+		{ // camera subpath
+			double ri = 1.0;
+			bool prev_delta = light_vert.is_delta; // whether the previous vertex is delta
+			for (std::size_t i = cam_id + 1; i > 2; ) {
+				--i;
+				const _vertex &cur_vert = cam_path[i];
+				bool next_delta = cam_path[i - 1].is_delta;
+				ri /=
+					prev_delta ? 1.0 : cur_vert.pdf_reverse /
+					next_delta ? 1.0 : cur_vert.pdf_forward;
+				if (!cur_vert.is_delta && !next_delta) {
+					sum_ri += ri;
+				}
+				prev_delta = cur_vert.is_delta;
+			}
+		}
+		if (!no_light) { // light subpath
+			double ri = 1.0;
+			bool prev_delta = cam_vert.is_delta;
+			for (std::size_t i = light_id + 1; i > 0; ) {
+				--i;
+				const _vertex &cur_vert = light_path[i];
+				bool next_delta = i > 1 ? light_path[i - 1].is_delta : false;
+				ri /=
+					prev_delta ? 1.0 : cur_vert.pdf_reverse /
+					next_delta ? 1.0 : cur_vert.pdf_forward;
+				if (!cur_vert.is_delta && !next_delta) {
+					sum_ri += ri;
+				}
+				prev_delta = cur_vert.is_delta;
+			}
+		}
+		return 1.0 / (1.0 + sum_ri);
 	}
 
 	spectrum bidirectional_path_tracer::incoming_light(const scene &sc, const ray &r, pcg32 &random) const {
@@ -196,20 +252,34 @@ namespace fluid::renderer {
 			return spectrum();
 		}
 		std::uniform_real_distribution<double> dist(0.0, 1.0);
+		std::uniform_int_distribution<std::size_t> light_dist(0, num_lights - 1);
+
+		/*auto [prim, hit, isect] = sc.ray_cast(r);
+		if (hit.is_hit()) {
+			const primitive *light = sc.get_lights()[light_dist(random)];
+			primitives::surface_sample surf_sample = light->sample_surface(vec2d(dist(random), dist(random)));
+			if (sc.test_visibility(surf_sample.position, isect.intersection)) {
+				vec3d norm_diff = (surf_sample.position - isect.intersection).normalized_unchecked();
+				spectrum f = isect.surface_bsdf.f(
+					isect.tangent * -r.direction.normalized_unchecked(), isect.tangent * norm_diff
+				);
+				double dot = std::abs(vec_ops::dot(isect.geometric_normal, norm_diff));
+				return 0.5 * modulate(f, light->entity->mat.emission.get_value(isect.uv) * (sc.get_lights().size() * dot / surf_sample.pdf));
+			}
+		}
+		return spectrum();*/
 
 		// normalize camera ray direction
 		ray cam_ray = r;
 		cam_ray.direction = cam_ray.direction.normalized_unchecked();
 		// sample light ray
-		std::uniform_int_distribution<std::size_t> light_dist(0, num_lights - 1);
 		const primitive *light = sc.get_lights()[light_dist(random)];
 		primitives::surface_sample surf_sample = light->sample_surface(vec2d(dist(random), dist(random)));
-		vec2d light_ray_dir_sample(dist(random), dist(random));
 		// only purely diffuse light sources are supported
-		vec3d light_ray_dir_tangent = warping::unit_hemisphere_from_unit_square(light_ray_dir_sample);
-		double light_ray_dir_pdf = warping::pdf_unit_hemisphere_from_unit_square(light_ray_dir_sample);
+		vec3d light_ray_dir_tangent = warping::unit_hemisphere_from_unit_square(vec2d(dist(random), dist(random)));
+		double light_ray_dir_pdf = warping::pdf_unit_hemisphere_from_unit_square();
 		rmat3d light_tangent = compute_arbitrary_tangent_space(surf_sample.geometric_normal);
-		ray light_ray = intersection_info::spawn_ray_from(
+		ray light_ray = scene::spawn_ray_from(
 			surf_sample.position, light_tangent.transposed() * light_ray_dir_tangent,
 			surf_sample.geometric_normal, ray_offset
 		);
@@ -243,13 +313,45 @@ namespace fluid::renderer {
 		std::size_t count = 0;
 		// connect light rays
 		for (std::size_t ci = 1; ci < cam_path.size(); ++ci) {
-			// TODO sample the light
 			_vertex &cam_vert = cam_path[ci];
 			// account for direct light hits
 			if (!cam_vert.prim->entity->mat.emission.modulation.near_zero()) {
-				result += modulate(cam_vert.attenuation, cam_vert.prim->entity->mat.emission.get_value(cam_vert.uv));
+				spectrum s = modulate(
+					cam_vert.attenuation, cam_vert.prim->entity->mat.emission.get_value(cam_vert.uv)
+				);
+				s *= _mis_weight(cam_path, light_path, ci, 0, num_lights, true);
+				result += s;
 			}
 			if (!cam_vert.is_delta) {
+				{ // sample a point on a light
+					const primitive *new_light = sc.get_lights()[light_dist(random)];
+					primitives::surface_sample new_surf_sample = new_light->sample_surface(
+						vec2d(dist(random), dist(random))
+					);
+					if (sc.test_visibility(new_surf_sample.position, cam_vert.position, ray_offset)) {
+						_vertex light_vert;
+						light_vert.position = new_surf_sample.position;
+						light_vert.geometric_normal = new_surf_sample.geometric_normal;
+						light_vert.uv = new_surf_sample.uv;
+						light_vert.attenuation =
+							new_light->entity->mat.emission.get_value(new_surf_sample.uv) *
+							(static_cast<double>(num_lights) / new_surf_sample.pdf);
+						light_vert.pdf_forward = new_surf_sample.pdf / static_cast<double>(num_lights);
+						light_vert.prim = new_light;
+						spectrum s = modulate(cam_vert.attenuation, light_vert.attenuation);
+						vec3d diff = light_vert.position - cam_vert.position;
+						vec3d out_dir = cam_vert.tangent * diff.normalized_unchecked();
+						s = modulate(s, cam_vert.surface_bsdf.f(cam_vert.incoming_ray_dir_tangent, out_dir));
+						s *= std::abs(
+							vec_ops::dot(out_dir, cam_vert.geometric_normal) *
+							vec_ops::dot(out_dir, new_surf_sample.geometric_normal)
+						) / diff.squared_length();
+						auto sa_light_vert = _scoped_assign_to(light_path[0], light_vert);
+						s *= _mis_weight(cam_path, light_path, ci, 0, num_lights, false);
+						result += s;
+					}
+				}
+				// other generic connection scenarios
 				for (std::size_t li = 1; li < light_path.size(); ++li) {
 					_vertex &light_vert = light_path[li];
 					if (!light_vert.is_delta) {
@@ -262,18 +364,17 @@ namespace fluid::renderer {
 							light_vert.incoming_ray_dir_tangent, light_vert.tangent * -cam_to_light_norm
 						));
 						if (!s.near_zero()) {
-							vec3d
-								cam_test_pos = cam_vert.position + cam_vert.geometric_normal * ray_offset,
-								light_test_pos = light_vert.position + light_vert.geometric_normal * ray_offset;
-							if (sc.test_visibility(cam_test_pos, light_test_pos)) {
+							if (sc.test_visibility(cam_vert.position, light_vert.position, ray_offset)) {
 								// calculate G term
 								vec3d diff = cam_vert.position - light_vert.position;
 								double g = 1.0 / diff.squared_length();
 								diff *= std::sqrt(g);
 								g *= std::abs(vec_ops::dot(diff, cam_vert.geometric_normal));
 								g *= std::abs(vec_ops::dot(diff, light_vert.geometric_normal));
-								// multiply & accumulate
+								// multiply
 								s *= g;
+								// MIS
+								s *= _mis_weight(cam_path, light_path, ci, li, num_lights, false);
 								result += s;
 							}
 						}

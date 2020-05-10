@@ -48,7 +48,7 @@ namespace fluid::warping {
 		return vec3d(sin_phi * std::cos(theta), sin_phi * std::sin(theta), cos_phi);
 	}
 
-	double pdf_unit_sphere_from_unit_square(vec2d) {
+	double pdf_unit_sphere_from_unit_square() {
 		return 1.0 / (4.0 * constants::pi);
 	}
 
@@ -59,7 +59,7 @@ namespace fluid::warping {
 		return vec3d(sinphi * std::cos(theta), sinphi * std::sin(theta), cosphi);
 	}
 
-	double pdf_unit_hemisphere_from_unit_square(vec2d) {
+	double pdf_unit_hemisphere_from_unit_square() {
 		return 2.0 / (4.0 * constants::pi);
 	}
 

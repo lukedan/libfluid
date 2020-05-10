@@ -47,7 +47,7 @@ namespace fluid::renderer {
 				uv_p1, ///< The UV of \ref point1.
 				uv_e12, ///< The UV difference of \ref edge12.
 				uv_e13; ///< The UV difference of \ref edge13.
-			double surface_area = 0.0; ///< The surface area of this primitive. This includes both sides.
+			double double_surface_area = 0.0; ///< The surface area of this primitive. This includes both sides.
 
 			/// Returns the bounding box.
 			[[nodiscard]] aab3d get_bounding_box() const;
@@ -60,6 +60,8 @@ namespace fluid::renderer {
 
 			/// Samples the surface of this triangle.
 			[[nodiscard]] surface_sample sample_surface(vec2d) const;
+			/// Returns \ref double_surface_area.
+			[[nodiscard]] double surface_area() const;
 
 			/// Computes the normal and surface area of this triangle.
 			void compute_attributes();
@@ -85,6 +87,8 @@ namespace fluid::renderer {
 
 			/// Samples the surface of this sphere. This function is generally inaccurate and should be avoided.
 			[[nodiscard]] surface_sample sample_surface(vec2d) const;
+			/// Not implemented.
+			[[nodiscard]] double surface_area() const;
 
 			/// Sets the transformation of this sphere.
 			void set_transformation(rmat3x4d);
@@ -112,6 +116,8 @@ namespace fluid::renderer {
 		///
 		/// \return A point on the surface and the surface normal at that point.
 		[[nodiscard]] primitives::surface_sample sample_surface(vec2d) const;
+		/// Returns the surface area of this primitive.
+		[[nodiscard]] double surface_area() const;
 
 		union_t value; ///< The value of this primitive.
 		entity_info *entity = nullptr; ///< The entity associated with this primitive.

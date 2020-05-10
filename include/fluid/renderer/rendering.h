@@ -13,7 +13,7 @@
 
 namespace fluid::renderer {
 	/// Renders the scene to an image using an naive method for parallelization.
-	template <typename Incoming> image<spectrum> render_naive(
+	template <bool Monitor = false, typename Incoming> image<spectrum> render_naive(
 		Incoming &&li, const camera &cam, vec2s size, std::size_t spp, pcg32 &random
 	) {
 		using namespace std::chrono_literals;
@@ -21,20 +21,23 @@ namespace fluid::renderer {
 		image<spectrum> result(size);
 		std::uniform_real_distribution<double> dist(0.0, 1.0);
 		vec2d screen_div = vec_ops::memberwise::div(vec2d(1.0, 1.0), vec2d(size));
-		std::atomic<std::size_t> finished = 0;
-		std::thread monitor(
-			[&finished](std::size_t total) {
-				while (true) {
-					std::size_t fin = finished;
-					std::cout << fin << " / " << total << " (" << (100.0 * fin / static_cast<double>(total)) << "%)" << std::endl;
-					if (fin == total) {
-						break;
+		[[maybe_unused]] std::atomic<std::size_t> finished = 0;
+		[[maybe_unused]] std::thread monitor_thread;
+		if constexpr (Monitor) {
+			monitor_thread = std::thread(
+				[&finished](std::size_t total) {
+					while (true) {
+						std::size_t fin = finished;
+						std::cout << fin << " / " << total << " (" << (100.0 * fin / static_cast<double>(total)) << "%)" << std::endl;
+						if (fin == total) {
+							break;
+						}
+						std::this_thread::sleep_for(100ms);
 					}
-					std::this_thread::sleep_for(100ms);
-				}
-			},
-			size.x * size.y
-				);
+				},
+				size.x * size.y
+					);
+		}
 #pragma omp parallel
 		{
 			pcg32 thread_rnd(random());
@@ -49,11 +52,15 @@ namespace fluid::renderer {
 						res += li(cam.get_ray(pos), thread_rnd);
 					}
 					result.pixels(x, y) = res / static_cast<double>(spp);
-					++finished;
+					if constexpr (Monitor) {
+						++finished;
+					}
 				}
 			}
 		}
-		monitor.join();
+		if constexpr (Monitor) {
+			monitor_thread.join();
+		}
 		return result;
 	}
 

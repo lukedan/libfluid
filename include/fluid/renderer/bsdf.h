@@ -19,7 +19,7 @@ namespace fluid::renderer {
 
 		/// BRDF of Lambertian reflection.
 		struct lambertian_reflection_brdf {
-			constexpr static bool double_sided = false; ///< Controls whether or not this material is double-sided.
+			constexpr static bool double_sided = true; ///< Controls whether or not this material is double-sided.
 
 			/// For lambertian materials, the \p f term is constant.
 			spectrum f(vec3d, vec3d) const;

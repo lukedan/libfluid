@@ -40,15 +40,19 @@ namespace fluid::renderer {
 			}
 			result.position = point1 + edge12 * pos.x + edge13 * pos.y;
 			result.uv = uv_p1 + uv_e12 * pos.x + uv_e13 * pos.y;
-			result.pdf = 1.0 / surface_area;
+			result.pdf = 1.0 / double_surface_area;
 			return result;
+		}
+
+		double triangle_primitive::surface_area() const {
+			return double_surface_area;
 		}
 
 		void triangle_primitive::compute_attributes() {
 			vec3d cross = vec_ops::cross(edge12, edge13);
 			auto [norm, area] = cross.normalized_length_unchecked();
 			geometric_normal = norm;
-			surface_area = area;
+			double_surface_area = area;
 		}
 
 
@@ -107,6 +111,10 @@ namespace fluid::renderer {
 			// https://math.stackexchange.com/questions/942561/surface-area-of-transformed-sphere
 			result.pdf = 1.0;
 			return result;
+		}
+
+		double sphere_primitive::surface_area() const {
+			return 0.0;
 		}
 
 		void sphere_primitive::set_transformation(rmat3x4d trans) {
@@ -168,6 +176,15 @@ namespace fluid::renderer {
 		return std::visit(
 			[&](const auto &prim) {
 				return prim.sample_surface(pos);
+			},
+			value
+				);
+	}
+
+	double primitive::surface_area() const {
+		return std::visit(
+			[](const auto &prim) {
+				return prim.surface_area();
 			},
 			value
 				);

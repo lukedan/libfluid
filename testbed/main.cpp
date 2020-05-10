@@ -308,7 +308,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 				/*path_tracer tracer;*/
 				bidirectional_path_tracer tracer;
 				pcg32 random;
-				image<spectrum> img = render_naive(
+				image<spectrum> img = render_naive<true>(
 					[&](ray r, pcg32 &rnd) {
 						return tracer.incoming_light(sc, r, rnd);
 					},

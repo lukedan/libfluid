@@ -12,13 +12,6 @@ namespace fluid::renderer {
 		return result;
 	}
 
-	ray intersection_info::spawn_ray_from(vec3d pos, vec3d dir, vec3d norm, double offset) {
-		ray result;
-		result.origin = pos + norm * offset;
-		result.direction = compute_arbitrary_tangent_space(norm).transposed() * dir;
-		return result;
-	}
-
 	intersection_info intersection_info::from_intersection(const ray &ray, const primitive *prim, ray_cast_result hit) {
 		intersection_info result;
 		result.uv = prim->get_uv(hit);
@@ -81,11 +74,20 @@ namespace fluid::renderer {
 		return { nullptr, ray_cast_result(), intersection_info() };
 	}
 
-	bool scene::test_visibility(vec3d p1, vec3d p2) const {
+	bool scene::test_visibility(vec3d p1, vec3d p2, double eps) const {
+		vec3d diff = p2 - p1;
+		vec3d offset = diff.normalized_unchecked() * eps;
 		ray r;
-		r.origin = p1;
-		r.direction = p2 - p1;
+		r.direction = diff - 2.0 * offset;
+		r.origin = p1 + offset;
 		auto [prim, res] = _tree.ray_cast(r, 1.0);
 		return prim == nullptr;
+	}
+
+	ray scene::spawn_ray_from(vec3d pos, vec3d dir, vec3d norm, double offset) {
+		ray result;
+		result.origin = pos + norm * offset;
+		result.direction = compute_arbitrary_tangent_space(norm).transposed() * dir;
+		return result;
 	}
 }

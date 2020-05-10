@@ -29,9 +29,6 @@ namespace fluid::renderer {
 		/// as the input direction.
 		ray spawn_ray(vec3d tangent_dir, double offset = 1e-6) const;
 
-		/// Spawns a ray given the position, direction in tangent space, and normal.
-		static ray spawn_ray_from(vec3d pos, vec3d tangent_dir, vec3d normal, double offset = 1e-6);
-
 		/// Creates a \ref intersection_info from the given raycast result.
 		static intersection_info from_intersection(const ray&, const primitive*, ray_cast_result);
 	};
@@ -56,7 +53,11 @@ namespace fluid::renderer {
 		/// Performs ray casting.
 		std::tuple<const primitive*, ray_cast_result, intersection_info> ray_cast(const ray&) const;
 		/// Tests the visibility between two points.
-		bool test_visibility(vec3d, vec3d) const;
+		bool test_visibility(vec3d, vec3d, double eps = 1e-6) const;
+
+		/// Spawns a ray given the position, direction in tangent space, and normal. It is assumed that the direction
+		/// is in the same hemisphere as the normal.
+		static ray spawn_ray_from(vec3d pos, vec3d tangent_dir, vec3d normal, double offset = 1e-6);
 	private:
 		aabb_tree _tree; ///< The AABB tree.
 		std::deque<entity_info> _entities; ///< Information about all entities.
