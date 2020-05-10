@@ -12,6 +12,13 @@ namespace fluid::renderer {
 		return result;
 	}
 
+	ray intersection_info::spawn_ray_from(vec3d pos, vec3d dir, vec3d norm, double offset) {
+		ray result;
+		result.origin = pos + norm * offset;
+		result.direction = compute_arbitrary_tangent_space(norm).transposed() * dir;
+		return result;
+	}
+
 	intersection_info intersection_info::from_intersection(const ray &ray, const primitive *prim, ray_cast_result hit) {
 		intersection_info result;
 		result.uv = prim->get_uv(hit);
@@ -42,7 +49,7 @@ namespace fluid::renderer {
 				tri.uv_e12 = m.uvs[i2] - tri.uv_p1;
 				tri.uv_e13 = m.uvs[i3] - tri.uv_p1;
 			}
-			tri.compute_geometric_normal();
+			tri.compute_attributes();
 			_tree.add_primitive(std::move(prim));
 		}
 	}
@@ -57,6 +64,13 @@ namespace fluid::renderer {
 
 	void scene::finish() {
 		_tree.build();
+		// collect light sources
+		_lights.clear();
+		for (const primitive &prim : _tree.get_primitives()) {
+			if (!prim.entity->mat.emission.modulation.near_zero()) {
+				_lights.emplace_back(&prim);
+			}
+		}
 	}
 
 	std::tuple<const primitive*, ray_cast_result, intersection_info> scene::ray_cast(const ray &r) const {
@@ -65,5 +79,13 @@ namespace fluid::renderer {
 			return { prim, res, intersection_info::from_intersection(r, prim, res) };
 		}
 		return { nullptr, ray_cast_result(), intersection_info() };
+	}
+
+	bool scene::test_visibility(vec3d p1, vec3d p2) const {
+		ray r;
+		r.origin = p1;
+		r.direction = p2 - p1;
+		auto [prim, res] = _tree.ray_cast(r, 1.0);
+		return prim == nullptr;
 	}
 }

@@ -42,6 +42,28 @@ namespace fluid::warping {
 	}
 
 
+	vec3d unit_sphere_from_unit_square(vec2d square) {
+		double cos_phi = square.x * 2.0 - 1.0, sin_phi = std::sqrt(1.0 - cos_phi * cos_phi);
+		double theta = square.y * 2.0f * constants::pi;
+		return vec3d(sin_phi * std::cos(theta), sin_phi * std::sin(theta), cos_phi);
+	}
+
+	double pdf_unit_sphere_from_unit_square(vec2d) {
+		return 1.0 / (4.0 * constants::pi);
+	}
+
+
+	vec3d unit_hemisphere_from_unit_square(vec2d square) {
+		double cosphi = square.x, sinphi = std::sqrt(1.0 - cosphi * cosphi);
+		double theta = square.y * 2.0 * constants::pi;
+		return vec3d(sinphi * std::cos(theta), sinphi * std::sin(theta), cosphi);
+	}
+
+	double pdf_unit_hemisphere_from_unit_square(vec2d) {
+		return 2.0 / (4.0 * constants::pi);
+	}
+
+
 	vec3d unit_hemisphere_from_unit_square_cosine(vec2d square) {
 		vec2d result = unit_disk_from_unit_square_concentric(square);
 		double y = std::sqrt(std::max(0.0, 1.0 - result.squared_length()));

@@ -4,6 +4,7 @@
 /// Implementation of primitives.
 
 #include "fluid/math/constants.h"
+#include "fluid/math/warping.h"
 
 namespace fluid::renderer {
 	namespace primitives {
@@ -28,8 +29,26 @@ namespace fluid::renderer {
 			return uv_p1 + hit.custom[0] * uv_e12 + hit.custom[1] * uv_e13;
 		}
 
-		void triangle_primitive::compute_geometric_normal() {
-			geometric_normal = vec_ops::cross(edge12, edge13).normalized_unchecked();
+		surface_sample triangle_primitive::sample_surface(vec2d pos) const {
+			surface_sample result;
+			if (pos.x > pos.y) {
+				pos.x = 1.0 - pos.x;
+				result.geometric_normal = geometric_normal;
+			} else {
+				pos.y = 1.0 - pos.y;
+				result.geometric_normal = -geometric_normal;
+			}
+			result.position = point1 + edge12 * pos.x + edge13 * pos.y;
+			result.uv = uv_p1 + uv_e12 * pos.x + uv_e13 * pos.y;
+			result.pdf = 1.0 / surface_area;
+			return result;
+		}
+
+		void triangle_primitive::compute_attributes() {
+			vec3d cross = vec_ops::cross(edge12, edge13);
+			auto [norm, area] = cross.normalized_length_unchecked();
+			geometric_normal = norm;
+			surface_area = area;
 		}
 
 
@@ -63,14 +82,30 @@ namespace fluid::renderer {
 
 		vec3d sphere_primitive::get_geometric_normal(ray_cast_result r) const {
 			vec3d normal(r.custom[0], r.custom[1], r.custom[2]);
-			normal = local_to_world * normal;
+			normal = world_to_local.transposed() * normal;
 			return normal.normalized_unchecked();
 		}
 
 		vec2d sphere_primitive::get_uv(ray_cast_result r) const {
 			vec2d result;
 			result.x = ((std::atan2(r.custom[2], r.custom[0]) / constants::pi) + 1.0) * 0.5;
+			// for performance
 			result.y = (r.custom[1] + 1.0) * 0.5;
+			return result;
+		}
+
+		surface_sample sphere_primitive::sample_surface(vec2d pos) const {
+			vec3d pos_local = warping::unit_sphere_from_unit_square(pos);
+			surface_sample result;
+			// position, this can be nonuniform after transforming
+			result.position = local_to_world * pos_local + local_to_world_offset;
+			// compute uv
+			result.uv.x = ((std::atan2(pos_local.z, pos_local.x) / constants::pi) + 1.0) * 0.5;
+			result.uv.y = (pos_local.y + 1.0) * 0.5; // for performance
+			// normal
+			result.geometric_normal = world_to_local.transposed() * pos_local;
+			// https://math.stackexchange.com/questions/942561/surface-area-of-transformed-sphere
+			result.pdf = 1.0;
 			return result;
 		}
 
@@ -124,6 +159,15 @@ namespace fluid::renderer {
 		return std::visit(
 			[&](const auto &prim) {
 				return prim.get_uv(hit);
+			},
+			value
+				);
+	}
+
+	primitives::surface_sample primitive::sample_surface(vec2d pos) const {
+		return std::visit(
+			[&](const auto &prim) {
+				return prim.sample_surface(pos);
 			},
 			value
 				);

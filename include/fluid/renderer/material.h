@@ -19,13 +19,12 @@ namespace fluid::renderer {
 			std::shared_ptr<image<T>> texture; ///< The texture.
 			T modulation; ///< The spectrum that the texture is multiplied by.
 
-			/// Returns the value of this channel at the given texture coordinates. The coordinates are assumed to be
-			/// within [0, 1].
-			spectrum get_value_unit(vec2d uv) const {
+			/// Returns the value of this channel at the given texture coordinates.
+			spectrum get_value(vec2d uv) const {
 				if (texture == nullptr) {
 					return modulation;
 				}
-				return modulate(texture->sample_unit(uv), modulation);
+				return modulate(texture->sample(uv), modulation);
 			}
 		};
 
@@ -64,10 +63,12 @@ namespace fluid::renderer {
 			materials::specular_transmission
 		>;
 
-		/// Returns a BSDF that corresponds to the given UV coordinates. The UV coordinates are assumed to be within
-		/// [0, 1]. \ref bsdf::emission is set by this function, while \ref bsdf::value is set by the underlying
-		/// material type.
+		/// Returns a BSDF that corresponds to the given UV coordinates. \ref bsdf::emission is set by this function,
+		/// while \ref bsdf::value is set by the underlying material type.
 		bsdf get_bsdf(vec2d) const;
+
+		/// Returns whether this material is emissive, i.e., whether it acts as a light source.
+		bool has_emission() const;
 
 		union_t value; ///< The value of this material.
 		materials::channel<spectrum> emission; ///< The emission of this material.

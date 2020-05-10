@@ -15,14 +15,14 @@ namespace fluid::renderer {
 
 		outgoing_ray_sample lambertian_reflection_brdf::sample_f(vec3d norm_in, vec2d random) const {
 			outgoing_ray_sample result;
-			result.norm_out_direction = warping::unit_hemisphere_from_unit_square_cosine(random);
+			result.norm_out_direction_tangent = warping::unit_hemisphere_from_unit_square_cosine(random);
 			if constexpr (double_sided) {
 				if (norm_in.y < 0.0) {
-					result.norm_out_direction.y = -result.norm_out_direction.y;
+					result.norm_out_direction_tangent.y = -result.norm_out_direction_tangent.y;
 				}
 			}
-			result.pdf = warping::pdf_unit_hemisphere_from_unit_square_cosine(result.norm_out_direction);
-			result.reflectance = f(norm_in, result.norm_out_direction);
+			result.pdf = warping::pdf_unit_hemisphere_from_unit_square_cosine(result.norm_out_direction_tangent);
+			result.reflectance = f(norm_in, result.norm_out_direction_tangent);
 			return result;
 		}
 
@@ -38,6 +38,10 @@ namespace fluid::renderer {
 			}
 		}
 
+		bool lambertian_reflection_brdf::is_delta() const {
+			return false;
+		}
+
 
 		spectrum specular_reflection_brdf::f(vec3d, vec3d) const {
 			return spectrum();
@@ -45,9 +49,9 @@ namespace fluid::renderer {
 
 		outgoing_ray_sample specular_reflection_brdf::sample_f(vec3d norm_in, vec2d random) const {
 			outgoing_ray_sample result;
-			result.norm_out_direction.x = -norm_in.x;
-			result.norm_out_direction.y = norm_in.y;
-			result.norm_out_direction.z = -norm_in.z;
+			result.norm_out_direction_tangent.x = -norm_in.x;
+			result.norm_out_direction_tangent.y = norm_in.y;
+			result.norm_out_direction_tangent.z = -norm_in.z;
 			result.pdf = 1.0;
 			result.reflectance = reflectance / std::abs(norm_in.y); // cancel out Lambertian term
 			return result;
@@ -55,6 +59,10 @@ namespace fluid::renderer {
 
 		double specular_reflection_brdf::pdf(vec3d norm_in, vec3d norm_out) const {
 			return 0.0;
+		}
+
+		bool specular_reflection_brdf::is_delta() const {
+			return true;
 		}
 
 
@@ -73,7 +81,7 @@ namespace fluid::renderer {
 			double eta = eta_in / eta_out;
 			double sin2_out = (1.0 - cos_in * cos_in) * eta * eta;
 			if (sin2_out >= 1.0) { // total internal reflection
-				result.norm_out_direction = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
+				result.norm_out_direction_tangent = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
 				result.pdf = 1.0;
 				result.reflectance = skin / cos_in;
 				return result;
@@ -81,12 +89,12 @@ namespace fluid::renderer {
 			double cos_out = std::sqrt(1.0 - sin2_out);
 			double fres = fresnel::dielectric(cos_in, cos_out, eta_in, eta_out);
 			if (random.x > fres) { // refraction
-				result.norm_out_direction = -eta * norm_in;
-				result.norm_out_direction.y += (eta * cos_in - cos_out) * sign;
+				result.norm_out_direction_tangent = -eta * norm_in;
+				result.norm_out_direction_tangent.y += (eta * cos_in - cos_out) * sign;
 				result.pdf = 1.0 - fres;
 				result.reflectance = (1.0 - fres) * skin / cos_out;
 			} else { // reflection
-				result.norm_out_direction = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
+				result.norm_out_direction_tangent = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
 				result.pdf = fres;
 				result.reflectance = fres * skin / cos_in;
 			}
@@ -95,6 +103,10 @@ namespace fluid::renderer {
 
 		double specular_transmission_bsdf::pdf(vec3d norm_in, vec3d norm_out) const {
 			return 0.0;
+		}
+
+		bool specular_transmission_bsdf::is_delta() const {
+			return true;
 		}
 	}
 
@@ -124,6 +136,15 @@ namespace fluid::renderer {
 		return std::visit(
 			[&](const auto &v) {
 				return v.sample_f(norm_in, random);
+			},
+			value
+				);
+	}
+
+	bool bsdf::is_delta() const {
+		return std::visit(
+			[](const auto &v) {
+				return v.is_delta();
 			},
 			value
 				);

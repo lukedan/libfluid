@@ -15,7 +15,7 @@ namespace fluid::renderer {
 		result.half_horizontal = vec_ops::cross(result.norm_forward, up)
 			.normalized_checked()
 			.value_or(get_cross_product_axis(result.norm_forward));
-		result.half_vertical = vec_ops::cross(result.half_horizontal, result.norm_forward);
+		result.half_vertical = vec_ops::cross(result.norm_forward, result.half_horizontal);
 
 		result.half_horizontal *= tan_half * width_over_height;
 		result.half_vertical *= tan_half;

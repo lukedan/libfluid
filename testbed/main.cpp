@@ -18,6 +18,8 @@
 #include <fluid/data_structures/point_cloud.h>
 
 #include <fluid/renderer/path_tracer.h>
+#include <fluid/renderer/rendering.h>
+#include <fluid/renderer/bidirectional_path_tracer.h>
 
 #include "test_scenes.h"
 
@@ -299,12 +301,19 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 		case GLFW_KEY_F5:
 			{
 				std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-				/*auto [scene, cam] = cornell_box();*/
-				auto [scene, cam] = glass_ball_box();
-				scene.finish();
+				/*auto [sc, cam] = cornell_box();*/
+				auto [sc, cam] = glass_ball_box();
+				sc.finish();
 				std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-				path_tracer tracer;
-				auto img = tracer.render(scene, cam, vec2s(400, 400));
+				/*path_tracer tracer;*/
+				bidirectional_path_tracer tracer;
+				pcg32 random;
+				image<spectrum> img = render_naive(
+					[&](ray r, pcg32 &rnd) {
+						return tracer.incoming_light(sc, r, rnd);
+					},
+					cam, vec2s(400, 400), 100, random
+						);
 				img.save_ppm(
 					"test.ppm",
 					[](spectrum pixel) {

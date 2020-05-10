@@ -47,8 +47,10 @@ namespace fluid::renderer {
 		/// again before \ref ray_cast() is called.
 		void build();
 
-		/// Performs ray casting.
-		std::pair<const primitive*, ray_cast_result> ray_cast(const ray&) const;
+		/// Performs ray casting. The additional parameter is used to limit the range of the ray cast.
+		std::pair<const primitive*, ray_cast_result> ray_cast(
+			const ray&, double max_t = std::numeric_limits<double>::max()
+		) const;
 
 		/// Returns the list of all primitives.
 		const std::vector<primitive> &get_primitives() const {

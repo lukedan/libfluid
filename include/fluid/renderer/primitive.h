@@ -27,6 +27,15 @@ namespace fluid::renderer {
 
 	/// Definition of different types of primitives.
 	namespace primitives {
+		/// Stores the result of sampling the surface of a primitive.
+		struct surface_sample {
+			vec3d
+				position, ///< Position on the surface in world coordinates.
+				geometric_normal; ///< The geometric normal.
+			vec2d uv; ///< The UV at the sampled position.
+			double pdf = 0.0; ///< The probability density function of this sample's position.
+		};
+
 		/// A triangle primitive.
 		struct triangle_primitive {
 			vec3d
@@ -38,6 +47,7 @@ namespace fluid::renderer {
 				uv_p1, ///< The UV of \ref point1.
 				uv_e12, ///< The UV difference of \ref edge12.
 				uv_e13; ///< The UV difference of \ref edge13.
+			double surface_area = 0.0; ///< The surface area of this primitive. This includes both sides.
 
 			/// Returns the bounding box.
 			[[nodiscard]] aab3d get_bounding_box() const;
@@ -48,8 +58,11 @@ namespace fluid::renderer {
 			/// Returns the UV at the given intersection.
 			[[nodiscard]] vec2d get_uv(ray_cast_result) const;
 
-			/// Computes the normal of this triangle.
-			void compute_geometric_normal();
+			/// Samples the surface of this triangle.
+			[[nodiscard]] surface_sample sample_surface(vec2d) const;
+
+			/// Computes the normal and surface area of this triangle.
+			void compute_attributes();
 		};
 		/// A sphere primitive. The primitive is a sphere at the origin with radius 1 transformed by the given
 		/// transformation matrix.
@@ -69,6 +82,9 @@ namespace fluid::renderer {
 			[[nodiscard]] vec3d get_geometric_normal(ray_cast_result) const;
 			/// Computes the UV at the given intersection.
 			[[nodiscard]] vec2d get_uv(ray_cast_result) const;
+
+			/// Samples the surface of this sphere. This function is generally inaccurate and should be avoided.
+			[[nodiscard]] surface_sample sample_surface(vec2d) const;
 
 			/// Sets the transformation of this sphere.
 			void set_transformation(rmat3x4d);
@@ -91,6 +107,11 @@ namespace fluid::renderer {
 		[[nodiscard]] vec3d get_geometric_normal(ray_cast_result) const;
 		/// Returns the UV at the given intersection.
 		[[nodiscard]] vec2d get_uv(ray_cast_result) const;
+
+		/// Samples the surface of this primitive.
+		///
+		/// \return A point on the surface and the surface normal at that point.
+		[[nodiscard]] primitives::surface_sample sample_surface(vec2d) const;
 
 		union_t value; ///< The value of this primitive.
 		entity_info *entity = nullptr; ///< The entity associated with this primitive.

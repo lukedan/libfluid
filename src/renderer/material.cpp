@@ -11,7 +11,7 @@ namespace fluid::renderer {
 		bsdf lambertian_reflection::get_bsdf(vec2d uv) const {
 			bsdf result;
 			auto &lambert = result.value.emplace<bsdfs::lambertian_reflection_brdf>();
-			lambert.reflectance = reflectance.get_value_unit(uv);
+			lambert.reflectance = reflectance.get_value(uv);
 			return result;
 		}
 
@@ -19,7 +19,7 @@ namespace fluid::renderer {
 		bsdf specular_reflection::get_bsdf(vec2d uv) const {
 			bsdf result;
 			auto &specular = result.value.emplace<bsdfs::specular_reflection_brdf>();
-			specular.reflectance = reflectance.get_value_unit(uv);
+			specular.reflectance = reflectance.get_value(uv);
 			return result;
 		}
 
@@ -27,7 +27,7 @@ namespace fluid::renderer {
 		bsdf specular_transmission::get_bsdf(vec2d uv) const {
 			bsdf result;
 			auto &specular = result.value.emplace<bsdfs::specular_transmission_bsdf>();
-			specular.skin = skin.get_value_unit(uv);
+			specular.skin = skin.get_value(uv);
 			specular.index_of_refraction = index_of_refraction;
 			return result;
 		}
@@ -38,10 +38,14 @@ namespace fluid::renderer {
 		return std::visit(
 			[&](const auto &mat) {
 				bsdf result = mat.get_bsdf(uv_unit);
-				result.emission = emission.get_value_unit(uv_unit);
+				result.emission = emission.get_value(uv_unit);
 				return result;
 			},
 			value
 				);
+	}
+
+	bool material::has_emission() const {
+		return !emission.modulation.near_zero();
 	}
 }

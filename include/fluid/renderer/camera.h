@@ -13,7 +13,7 @@ namespace fluid::renderer {
 			position, ///< The position of the camera.
 			norm_forward, ///< Normalized forward direction. This corresponds to the center of the screen.
 			half_horizontal, ///< Half of the screen's width. Use with \ref norm_forward.
-			half_vertical; ///< Half of the screen's height, pointing upwards. Use with \ref norm_forward.
+			half_vertical; ///< Half of the screen's height, pointing downwards. Use with \ref norm_forward.
 
 		/// Creates a camera from the given parameters.
 		static camera from_parameters(vec3d pos, vec3d ref, vec3d up, double fovy_radians, double width_over_height);

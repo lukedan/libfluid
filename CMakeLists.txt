@@ -38,6 +38,7 @@ if(FLUID_BUILD_RENDERER)
 	target_sources(fluid
 		PRIVATE
 			"src/renderer/aabb_tree.cpp"
+			"src/renderer/bidirectional_path_tracer.cpp"
 			"src/renderer/bsdf.cpp"
 			"src/renderer/camera.cpp"
 			"src/renderer/fresnel.cpp"

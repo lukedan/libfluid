@@ -81,9 +81,13 @@ namespace fluid::renderer {
 		}
 	}
 
-	std::pair<const primitive*, ray_cast_result> aabb_tree::ray_cast(const ray &r) const {
-		if (std::isnan(
-			aab_ray_intersection(_root->bounding_box.min, _root->bounding_box.max, r.origin, r.direction).x
+	/// Tests if the intersection is valid, i.e., if it's not nan and if the value is less than the max value.
+	bool _intersects(double t, double max_t) {
+		return std::isless(t, max_t);
+	}
+	std::pair<const primitive*, ray_cast_result> aabb_tree::ray_cast(const ray &r, double max_t) const {
+		if (!_intersects(
+			aab_ray_intersection(_root->bounding_box.min, _root->bounding_box.max, r.origin, r.direction).x, max_t
 		)) {
 			return { nullptr, ray_cast_result() };
 		}
@@ -91,24 +95,22 @@ namespace fluid::renderer {
 		nodes.emplace(_root);
 		const primitive *hit = nullptr;
 		ray_cast_result hit_res;
-		hit_res.t = std::numeric_limits<double>::max();
+		hit_res.t = max_t;
 		while (!nodes.empty()) {
 			node *current = nodes.top();
 			nodes.pop();
 			if (current->is_leaf()) {
 				ray_cast_result result = current->prim->ray_cast(r);
-				if (result.is_hit()) {
-					if (result.t < hit_res.t) {
-						hit = current->prim;
-						hit_res = result;
-					}
+				if (_intersects(result.t, hit_res.t)) {
+					hit = current->prim;
+					hit_res = result;
 				}
 			} else {
 				node *c1 = current->child1, *c2 = current->child2;
 				double
 					i1 = aab_ray_intersection(c1->bounding_box.min, c1->bounding_box.max, r.origin, r.direction).x,
 					i2 = aab_ray_intersection(c2->bounding_box.min, c2->bounding_box.max, r.origin, r.direction).x;
-				bool hit1 = !std::isnan(i1) && i1 < hit_res.t, hit2 = !std::isnan(i2) && i2 < hit_res.t;
+				bool hit1 = _intersects(i1, hit_res.t), hit2 = _intersects(i2, hit_res.t);
 				if (!hit1) {
 					if (hit2) {
 						nodes.emplace(current->child2);
