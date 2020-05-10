@@ -56,7 +56,7 @@ namespace fluid::warping {
 	vec3d unit_hemisphere_from_unit_square(vec2d square) {
 		double cosphi = square.x, sinphi = std::sqrt(1.0 - cosphi * cosphi);
 		double theta = square.y * 2.0 * constants::pi;
-		return vec3d(sinphi * std::cos(theta), sinphi * std::sin(theta), cosphi);
+		return vec3d(sinphi * std::cos(theta), cosphi, sinphi * std::sin(theta));
 	}
 
 	double pdf_unit_hemisphere_from_unit_square() {

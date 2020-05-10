@@ -5,6 +5,8 @@
 
 #include <stack>
 
+#include "fluid/data_structures/short_vec.h"
+
 namespace fluid::renderer {
 	aabb_tree::aabb_tree(aabb_tree &&src) noexcept :
 		_node_pool(std::move(src._node_pool)),
@@ -91,7 +93,7 @@ namespace fluid::renderer {
 		)) {
 			return { nullptr, ray_cast_result() };
 		}
-		std::stack<node*> nodes;
+		std::stack<node*, short_vec<node*, 64>> nodes;
 		nodes.emplace(_root);
 		const primitive *hit = nullptr;
 		ray_cast_result hit_res;

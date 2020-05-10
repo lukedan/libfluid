@@ -6,6 +6,7 @@
 #include <random>
 
 #include "fluid/math/warping.h"
+#include "fluid/data_structures/short_vec.h"
 
 namespace fluid::renderer {
 	/// A version of \ref _pdf_to_solid_angle() that accepts a normalized direction and the squared distance between
@@ -68,6 +69,8 @@ namespace fluid::renderer {
 		}
 	};
 
+	using _path_vec = short_vec<_vertex, 16>; ///< Used to store paths.
+
 	/// Traces a path given the initial ray and the maximum number of bounces.
 	///
 	/// \param out The output array. It is assumed that this already contains the initial vertex.
@@ -77,7 +80,7 @@ namespace fluid::renderer {
 	/// \param pdf The probability density function of the direction of the initial ray.
 	/// \param rnd The random number generator.
 	void _trace_path(
-		std::vector<_vertex> &out, const scene &sc, std::size_t max_bounces, ray r, double pdf,
+		_path_vec &out, const scene &sc, std::size_t max_bounces, ray r, double pdf,
 		double ray_offset, pcg32 &rnd
 	) {
 		std::uniform_real_distribution<double> dist(0.0, 1.0);
@@ -178,7 +181,7 @@ namespace fluid::renderer {
 	/// Returns multiple importance sampling weight of the given path. The \p no_light parameter indicates whether
 	/// the entire light path is ignored because the camera path is used for lighting estimation.
 	double _mis_weight(
-		std::vector<_vertex> &cam_path, std::vector<_vertex> &light_path,
+		_path_vec &cam_path, _path_vec &light_path,
 		std::size_t cam_id, std::size_t light_id, std::size_t num_lights, bool no_light
 	) {
 		_vertex
@@ -218,9 +221,9 @@ namespace fluid::renderer {
 				--i;
 				const _vertex &cur_vert = cam_path[i];
 				bool next_delta = cam_path[i - 1].is_delta;
-				ri /=
-					prev_delta ? 1.0 : cur_vert.pdf_reverse /
-					next_delta ? 1.0 : cur_vert.pdf_forward;
+				ri *=
+					(prev_delta ? 1.0 : cur_vert.pdf_reverse) /
+					(next_delta ? 1.0 : cur_vert.pdf_forward);
 				if (!cur_vert.is_delta && !next_delta) {
 					sum_ri += ri;
 				}
@@ -234,9 +237,9 @@ namespace fluid::renderer {
 				--i;
 				const _vertex &cur_vert = light_path[i];
 				bool next_delta = i > 1 ? light_path[i - 1].is_delta : false;
-				ri /=
-					prev_delta ? 1.0 : cur_vert.pdf_reverse /
-					next_delta ? 1.0 : cur_vert.pdf_forward;
+				ri *=
+					(prev_delta ? 1.0 : cur_vert.pdf_reverse) /
+					(next_delta ? 1.0 : cur_vert.pdf_forward);
 				if (!cur_vert.is_delta && !next_delta) {
 					sum_ri += ri;
 				}
@@ -254,21 +257,6 @@ namespace fluid::renderer {
 		std::uniform_real_distribution<double> dist(0.0, 1.0);
 		std::uniform_int_distribution<std::size_t> light_dist(0, num_lights - 1);
 
-		/*auto [prim, hit, isect] = sc.ray_cast(r);
-		if (hit.is_hit()) {
-			const primitive *light = sc.get_lights()[light_dist(random)];
-			primitives::surface_sample surf_sample = light->sample_surface(vec2d(dist(random), dist(random)));
-			if (sc.test_visibility(surf_sample.position, isect.intersection)) {
-				vec3d norm_diff = (surf_sample.position - isect.intersection).normalized_unchecked();
-				spectrum f = isect.surface_bsdf.f(
-					isect.tangent * -r.direction.normalized_unchecked(), isect.tangent * norm_diff
-				);
-				double dot = std::abs(vec_ops::dot(isect.geometric_normal, norm_diff));
-				return 0.5 * modulate(f, light->entity->mat.emission.get_value(isect.uv) * (sc.get_lights().size() * dot / surf_sample.pdf));
-			}
-		}
-		return spectrum();*/
-
 		// normalize camera ray direction
 		ray cam_ray = r;
 		cam_ray.direction = cam_ray.direction.normalized_unchecked();
@@ -278,14 +266,12 @@ namespace fluid::renderer {
 		// only purely diffuse light sources are supported
 		vec3d light_ray_dir_tangent = warping::unit_hemisphere_from_unit_square(vec2d(dist(random), dist(random)));
 		double light_ray_dir_pdf = warping::pdf_unit_hemisphere_from_unit_square();
-		rmat3d light_tangent = compute_arbitrary_tangent_space(surf_sample.geometric_normal);
 		ray light_ray = scene::spawn_ray_from(
-			surf_sample.position, light_tangent.transposed() * light_ray_dir_tangent,
-			surf_sample.geometric_normal, ray_offset
+			surf_sample.position, light_ray_dir_tangent, surf_sample.geometric_normal, ray_offset
 		);
 
 		// trace camera path
-		std::vector<_vertex> cam_path;
+		_path_vec cam_path;
 		{
 			_vertex &cam_vert = cam_path.emplace_back();
 			cam_vert.attenuation = spectrum::identity;
@@ -293,7 +279,7 @@ namespace fluid::renderer {
 		}
 		_trace_path(cam_path, sc, max_camera_bounces, cam_ray, 1.0, ray_offset, random); // TODO camera pdf?
 		// trace light path
-		std::vector<_vertex> light_path;
+		_path_vec light_path;
 		{
 			_vertex &light_vert = light_path.emplace_back();
 			light_vert.attenuation =
@@ -305,6 +291,7 @@ namespace fluid::renderer {
 			light_vert.position = surf_sample.position;
 			light_vert.geometric_normal = surf_sample.geometric_normal;
 			light_vert.uv = surf_sample.uv;
+			light_vert.pdf_forward = surf_sample.pdf / static_cast<double>(num_lights);
 			light_vert.prim = light;
 		}
 		_trace_path(light_path, sc, max_light_bounces, light_ray, light_ray_dir_pdf, ray_offset, random);
@@ -382,6 +369,6 @@ namespace fluid::renderer {
 				}
 			}
 		}
-		return result;
+		return result * 0.5;
 	}
 }

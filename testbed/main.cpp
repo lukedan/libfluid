@@ -231,6 +231,14 @@ void mesher_thread() {
 }
 
 
+scene rend_scene;
+camera rend_cam;
+image<spectrum> rend_accum(vec2s(400, 400));
+image<fluid::vec3<std::uint8_t>> rend_image;
+pcg32 rend_random;
+bidirectional_path_tracer rend_tracer;
+std::size_t rend_spp = 0;
+
 enum class particle_visualize_mode : unsigned char {
 	none,
 	velocity_direction,
@@ -245,15 +253,18 @@ enum class mesh_visualize_mode : unsigned char {
 
 bool
 rotating = false,
+rendering = false,
 draw_particles = true,
 draw_cells = false,
 draw_faces = false,
 draw_mesh = true,
-draw_apic_debug = false;
+draw_apic_debug = false,
+draw_render_preview = true;
 vec2d mouse, rotation;
 particle_visualize_mode particle_vis = particle_visualize_mode::none;
 mesh_visualize_mode mesh_vis = mesh_visualize_mode::none;
 double camera_distance = -70.0;
+GLuint render_preview_texture = 0;
 
 // callbacks
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
@@ -285,6 +296,13 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			draw_apic_debug = !draw_apic_debug;
 			break;
 
+		case GLFW_KEY_V:
+			draw_render_preview = !draw_render_preview;
+			break;
+		case GLFW_KEY_S:
+			rendering = !rendering;
+			break;
+
 		case GLFW_KEY_F1:
 			particle_vis = static_cast<particle_visualize_mode>(static_cast<unsigned char>(particle_vis) + 1);
 			if (particle_vis == particle_visualize_mode::maximum) {
@@ -298,21 +316,46 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			}
 			break;
 
+		case GLFW_KEY_F3:
+			{
+				std::lock_guard<std::mutex> guard(sim_mesh_lock);
+				std::ofstream fout("mesh.obj");
+				sim_mesh.save_obj(fout);
+			}
+			break;
+		case GLFW_KEY_F4:
+			{
+				std::vector<vec3d> points;
+				{
+					std::lock_guard<std::mutex> guard(sim_particles_lock);
+					for (const fluid::simulation::particle &p : sim_particles) {
+						points.emplace_back(p.position);
+					}
+				}
+				std::ofstream fout("points.txt");
+				fluid::point_cloud::save_to_naive(fout, points.begin(), points.end());
+			}
+			break;
+
 		case GLFW_KEY_F5:
 			{
+				auto [sc, cam] = cornell_box_two_lights();
+				rend_scene = std::move(sc);
+				rend_scene.finish();
+				rend_cam = cam;
+				rend_accum = image<spectrum>(rend_accum.pixels.get_size());
+				rend_spp = 0;
+			}
+			break;
+
+		case GLFW_KEY_F7:
+			{
 				std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-				/*auto [sc, cam] = cornell_box();*/
-				auto [sc, cam] = glass_ball_box();
-				sc.finish();
-				std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-				/*path_tracer tracer;*/
-				bidirectional_path_tracer tracer;
-				pcg32 random;
 				image<spectrum> img = render_naive<true>(
-					[&](ray r, pcg32 &rnd) {
-						return tracer.incoming_light(sc, r, rnd);
+					[](ray r, pcg32 &rnd) {
+						return rend_tracer.incoming_light(rend_scene, r, rnd);
 					},
-					cam, vec2s(400, 400), 100, random
+					rend_cam, rend_accum.pixels.get_size(), 100, rend_random
 						);
 				img.save_ppm(
 					"test.ppm",
@@ -326,30 +369,25 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 								);
 					}
 				);
-				std::chrono::high_resolution_clock::time_point t3 = std::chrono::high_resolution_clock::now();
-				std::cout << "build scene: " << std::chrono::duration<double, std::milli>(t2 - t1).count() << "ms\n";
-				std::cout << "render: " << std::chrono::duration<double, std::milli>(t3 - t2).count() << "ms\n";
+				std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+				std::cout << "render: " << std::chrono::duration<double>(t2 - t1).count() << "s\n";
 			}
 			break;
 
-		case GLFW_KEY_S:
+		case GLFW_KEY_F8:
 			{
-				std::lock_guard<std::mutex> guard(sim_mesh_lock);
-				std::ofstream fout("mesh.obj");
-				sim_mesh.save_obj(fout);
-			}
-			break;
-		case GLFW_KEY_D:
-			{
-				std::vector<vec3d> points;
-				{
-					std::lock_guard<std::mutex> guard(sim_particles_lock);
-					for (const fluid::simulation::particle &p : sim_particles) {
-						points.emplace_back(p.position);
+				rend_accum.save_ppm(
+					"test.ppm",
+					[](spectrum pixel) {
+						vec3d rgb = pixel.to_rgb() / static_cast<double>(rend_spp);
+						return fluid::vec_ops::apply<fluid::vec3<std::uint8_t>>(
+							[](double v) {
+								return static_cast<std::uint8_t>(std::clamp(v * 255.0, 0.0, 255.0));
+							},
+							rgb
+								);
 					}
-				}
-				std::ofstream fout("points.txt");
-				fluid::point_cloud::save_to_naive(fout, points.begin(), points.end());
+				);
 			}
 			break;
 		}
@@ -403,15 +441,20 @@ int main() {
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_TEXTURE_2D);
 
 	int width, height;
 	glfwGetWindowSize(window, &width, &height);
 	resize_callback(window, width, height);
 
+	// setup simulation and mesher
 	std::thread sim_thread(simulation_thread);
 	sim_thread.detach();
 	std::thread mesh_thread(mesher_thread);
 	mesh_thread.detach();
+
+	// setup texture
+	glGenTextures(1, &render_preview_texture);
 
 	while (!glfwWindowShouldClose(window)) {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -657,6 +700,98 @@ int main() {
 				}
 			}
 			glEnd();
+		}
+
+		if (draw_render_preview) {
+			glDisable(GL_DEPTH_TEST);
+			glDisable(GL_CULL_FACE);
+
+			int width, height;
+			glfwGetWindowSize(window, &width, &height);
+
+			glMatrixMode(GL_PROJECTION);
+			glPushMatrix();
+			glLoadIdentity();
+			glOrtho(0.0, width, height, 0.0, -1.0, 1.0);
+
+			glMatrixMode(GL_MODELVIEW);
+			glPushMatrix();
+			glLoadIdentity();
+
+			// bind texture
+			glBindTexture(GL_TEXTURE_2D, render_preview_texture);
+			vec2s sz = rend_image.pixels.get_size();
+
+			if (rendering) {
+				// accumulate samples
+				std::size_t frame_spp = 1;
+				auto t1 = std::chrono::high_resolution_clock::now();
+				accumulate_naive(
+					[&](ray r, pcg32 &rnd) {
+						return rend_tracer.incoming_light(rend_scene, r, rnd);
+					},
+					rend_accum, rend_cam, frame_spp, rend_random
+						);
+				rend_spp += frame_spp;
+
+				auto t2 = std::chrono::high_resolution_clock::now();
+				std::cout <<
+					"sample time: " << std::chrono::duration<double>(t2 - t1).count() << "s / " <<
+					frame_spp << " samples\n";
+				std::cout << "total spp: " << rend_spp << "\n";
+
+				// copy to image
+				if (rend_image.pixels.get_size() != rend_accum.pixels.get_size()) {
+					rend_image = image<fluid::vec3<std::uint8_t>>(rend_accum.pixels.get_size());
+				}
+				for (std::size_t y = 0; y < rend_image.pixels.get_size().y; ++y) {
+					for (std::size_t x = 0; x < rend_image.pixels.get_size().x; ++x) {
+						vec3d color = rend_accum.pixels(x, y).to_rgb() / static_cast<double>(rend_spp);
+						rend_image.pixels(x, y) = fluid::vec_ops::apply<fluid::vec3<std::uint8_t>>(
+							[](double v) {
+								return static_cast<std::uint8_t>(std::clamp(v * 255.0, 0.0, 255.0));
+							},
+							color
+								);
+					}
+				}
+				// copy to opengl
+				glTexImage2D(
+					GL_TEXTURE_2D, 0, GL_RGB,
+					rend_image.pixels.get_size().x, rend_image.pixels.get_size().y, 0, GL_RGB, GL_UNSIGNED_BYTE,
+					&rend_image.pixels[0]
+				);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			}
+
+			glColor3d(1.0, 1.0, 1.0);
+			glBegin(GL_TRIANGLE_STRIP);
+
+			glTexCoord2d(0.0, 0.0);
+			glVertex2d(0.0, 0.0);
+
+			glTexCoord2d(1.0, 0.0);
+			glVertex2d(sz.x, 0.0);
+
+			glTexCoord2d(0.0, 1.0);
+			glVertex2d(0.0, sz.y);
+
+			glTexCoord2d(1.0, 1.0);
+			glVertex2d(sz.x, sz.y);
+
+			glEnd();
+
+			// cleanup
+			glBindTexture(GL_TEXTURE_2D, 0);
+
+			glMatrixMode(GL_MODELVIEW);
+			glPopMatrix();
+			glMatrixMode(GL_PROJECTION);
+			glPopMatrix();
+
+			glEnable(GL_CULL_FACE);
+			glEnable(GL_DEPTH_TEST);
 		}
 
 		glfwSwapBuffers(window);

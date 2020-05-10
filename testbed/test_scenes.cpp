@@ -53,7 +53,7 @@ scene::mesh_t create_box() {
 }
 
 
-std::pair<scene, camera> cornell_box() {
+std::pair<scene, camera> red_green_box() {
 	scene result;
 
 	material matte_white;
@@ -74,7 +74,7 @@ std::pair<scene, camera> cornell_box() {
 		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.14, 0.45, 0.091));
 	}
 
-	scene::mesh_t plane = create_plane(), box = create_box();
+	scene::mesh_t plane = create_plane();
 
 	entity_info floor;
 	floor.mat = matte_white;
@@ -125,6 +125,25 @@ std::pair<scene, camera> cornell_box() {
 		),
 		ceiling
 	);
+
+	camera cam = camera::from_parameters(
+		vec3d(0.0, 5.5, -30.0), vec3d(0.0, 2.5, 0.0), vec3d(0.0, 1.0, 0.0),
+		19.5 * constants::pi / 180.0, 1.0
+	);
+
+	return { std::move(result), cam };
+}
+
+std::pair<scene, camera> cornell_box_base() {
+	auto [result, cam] = red_green_box();
+
+	material matte_white;
+	{
+		auto &lambert = matte_white.value.emplace<materials::lambertian_reflection>();
+		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.725, 0.71, 0.68));
+	}
+
+	scene::mesh_t plane = create_plane(), box = create_box();
 
 	entity_info long_cube;
 	long_cube.mat = matte_white;
@@ -146,6 +165,20 @@ std::pair<scene, camera> cornell_box() {
 		short_cube
 	);
 
+	return { std::move(result), cam };
+}
+
+std::pair<scene, camera> cornell_box_one_light() {
+	auto [result, cam] = cornell_box_base();
+
+	material matte_white;
+	{
+		auto &lambert = matte_white.value.emplace<materials::lambertian_reflection>();
+		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.725, 0.71, 0.68));
+	}
+
+	scene::mesh_t plane = create_plane();
+
 	entity_info light;
 	light.mat = matte_white;
 	light.mat.emission.modulation = spectrum::from_rgb(2.0 * vec3d(17.0, 12.0, 4.0));
@@ -157,16 +190,11 @@ std::pair<scene, camera> cornell_box() {
 		light
 	);
 
-	camera cam = camera::from_parameters(
-		vec3d(0.0, 5.5, -30.0), vec3d(0.0, 2.5, 0.0), vec3d(0.0, 1.0, 0.0),
-		19.5 * constants::pi / 180.0, 1.0
-	);
-
 	return { std::move(result), cam };
 }
 
-std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
-	scene result;
+std::pair<scene, camera> cornell_box_two_lights() {
+	auto [result, cam] = cornell_box_base();
 
 	material matte_white;
 	{
@@ -174,16 +202,40 @@ std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
 		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.725, 0.71, 0.68));
 	}
 
-	material matte_red;
-	{
-		auto &lambert = matte_red.value.emplace<materials::lambertian_reflection>();
-		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.63, 0.065, 0.05));
-	}
+	scene::mesh_t plane = create_plane();
 
-	material matte_green;
+	entity_info light_yellow;
+	light_yellow.mat = matte_white;
+	light_yellow.mat.emission.modulation = spectrum::from_rgb(vec3d(17.0, 12.0, 4.0));
+	result.add_mesh_entity(
+		plane,
+		transform::scale_rotate_translate(
+			vec3d(3.0, 1.0, 3.0), vec3d(0.0, 0.0, 0.0), vec3d(2.0, 7.45, 0.0)
+		),
+		light_yellow
+	);
+
+	entity_info light_blue;
+	light_blue.mat = matte_white;
+	light_blue.mat.emission.modulation = spectrum::from_rgb(vec3d(4.0, 12.0, 17.0));
+	result.add_mesh_entity(
+		plane,
+		transform::scale_rotate_translate(
+			vec3d(3.0, 1.0, 3.0), vec3d(0.0, 0.0, 0.0), vec3d(-2.0, 7.45, 0.0)
+		),
+		light_blue
+	);
+
+	return { std::move(result), cam };
+}
+
+std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
+	auto [result, cam] = red_green_box();
+
+	material matte_white;
 	{
-		auto &lambert = matte_green.value.emplace<materials::lambertian_reflection>();
-		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.14, 0.45, 0.091));
+		auto &lambert = matte_white.value.emplace<materials::lambertian_reflection>();
+		lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.725, 0.71, 0.68));
 	}
 
 	material glass;
@@ -193,57 +245,7 @@ std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
 		specular.index_of_refraction = 1.55;
 	}
 
-	scene::mesh_t plane = create_plane(), box = create_box();
-
-	entity_info floor;
-	floor.mat = matte_white;
-	result.add_mesh_entity(
-		plane,
-		transform::scale_rotate_translate(
-			vec3d(10.0, 1.0, 10.0), vec3d(constants::pi, 0.0, 0.0), vec3d(0.0, -2.5, 0.0)
-		),
-		floor
-	);
-
-	entity_info left_wall;
-	left_wall.mat = matte_red;
-	result.add_mesh_entity(
-		plane,
-		transform::scale_rotate_translate(
-			vec3d(10.0, 1.0, 10.0), vec3d(0.0, 0.0, -0.5 * constants::pi), vec3d(5.0, 2.5, 0.0)
-		),
-		left_wall
-	);
-
-	entity_info right_wall;
-	right_wall.mat = matte_green;
-	result.add_mesh_entity(
-		plane,
-		transform::scale_rotate_translate(
-			vec3d(10.0, 1.0, 10.0), vec3d(0.0, 0.0, 0.5 * constants::pi), vec3d(-5.0, 2.5, 0.0)
-		),
-		right_wall
-	);
-
-	entity_info back_wall;
-	back_wall.mat = matte_white;
-	result.add_mesh_entity(
-		plane,
-		transform::scale_rotate_translate(
-			vec3d(10.0, 1.0, 10.0), vec3d(0.5 * constants::pi, 0.0, 0.0), vec3d(0.0, 2.5, 5.0)
-		),
-		back_wall
-	);
-
-	entity_info ceiling;
-	ceiling.mat = matte_white;
-	result.add_mesh_entity(
-		plane,
-		transform::scale_rotate_translate(
-			vec3d(10.0, 1.0, 10.0), vec3d(0.0, 0.0, 0.0), vec3d(0.0, 7.5, 0.0)
-		),
-		ceiling
-	);
+	scene::mesh_t plane = create_plane();
 
 	entity_info sphere;
 	sphere.mat = glass;
@@ -262,11 +264,6 @@ std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
 			vec3d(3.0, 1.0, 3.0), vec3d(0.0, 0.0, 0.0), vec3d(0.0, 7.45, 0.0)
 		),
 		light
-	);
-
-	camera cam = camera::from_parameters(
-		vec3d(0.0, 5.5, -30.0), vec3d(0.0, 2.5, 0.0), vec3d(0.0, 1.0, 0.0),
-		19.5 * constants::pi / 180.0, 1.0
 	);
 
 	return { std::move(result), cam };
