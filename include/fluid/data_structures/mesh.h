@@ -3,6 +3,7 @@
 /// \file
 /// Mesh related data structures.
 
+#include <algorithm>
 #include <vector>
 
 #include "../math/vec.h"
@@ -23,6 +24,13 @@ namespace fluid {
 			indices.clear();
 			colors.clear();
 			uvs.clear();
+		}
+
+		/// Reverses all face directions by changing vertex indices.
+		void reverse_face_directions() {
+			for (std::size_t i = 0; i + 2 < indices.size(); i += 3) {
+				std::swap(indices[i + 1], indices[i + 2]);
+			}
 		}
 
 		/// Generates normals for all vertices.

@@ -78,6 +78,13 @@ namespace fluid::renderer {
 			}
 		}
 
+		/// Returns the aspect ration of this image, i.e., width over height.
+		double aspect_ratio() const {
+			return
+				static_cast<double>(pixels.get_size().x) /
+				static_cast<double>(pixels.get_size().y);
+		}
+
 		grid2<Pixel> pixels; ///< The pixels of this image.
 	};
 

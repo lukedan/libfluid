@@ -53,7 +53,7 @@ scene::mesh_t create_box() {
 }
 
 
-std::pair<scene, camera> red_green_box() {
+std::pair<scene, camera> red_green_box(double asp_ratio) {
 	scene result;
 
 	material matte_white;
@@ -135,14 +135,14 @@ std::pair<scene, camera> red_green_box() {
 
 	camera cam = camera::from_parameters(
 		vec3d(0.0, 5.5, -30.0), vec3d(0.0, 2.5, 0.0), vec3d(0.0, 1.0, 0.0),
-		19.5 * constants::pi / 180.0, 1.0
+		19.5 * constants::pi / 180.0, asp_ratio
 	);
 
 	return { std::move(result), cam };
 }
 
-std::pair<scene, camera> cornell_box_base() {
-	auto [result, cam] = red_green_box();
+std::pair<scene, camera> cornell_box_base(double asp_ratio) {
+	auto [result, cam] = red_green_box(asp_ratio);
 
 	material matte_white;
 	{
@@ -175,8 +175,8 @@ std::pair<scene, camera> cornell_box_base() {
 	return { std::move(result), cam };
 }
 
-std::pair<scene, camera> cornell_box_one_light() {
-	auto [result, cam] = cornell_box_base();
+std::pair<scene, camera> cornell_box_one_light(double asp_ratio) {
+	auto [result, cam] = cornell_box_base(asp_ratio);
 
 	material matte_white;
 	{
@@ -200,8 +200,8 @@ std::pair<scene, camera> cornell_box_one_light() {
 	return { std::move(result), cam };
 }
 
-std::pair<scene, camera> cornell_box_two_lights() {
-	auto [result, cam] = cornell_box_base();
+std::pair<scene, camera> cornell_box_two_lights(double asp_ratio) {
+	auto [result, cam] = cornell_box_base(asp_ratio);
 
 	material matte_white;
 	{
@@ -236,8 +236,8 @@ std::pair<scene, camera> cornell_box_two_lights() {
 	return { std::move(result), cam };
 }
 
-std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
-	auto [result, cam] = red_green_box();
+std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box(double asp_ratio) {
+	auto [result, cam] = red_green_box(asp_ratio);
 
 	material matte_white;
 	{
@@ -277,7 +277,7 @@ std::pair<fluid::renderer::scene, fluid::renderer::camera> glass_ball_box() {
 }
 
 
-std::pair<scene, camera> fluid_box(vec3d min, vec3d max) {
+std::pair<scene, camera> fluid_box(vec3d min, vec3d max, double fovy, double asp_ratio) {
 	scene result;
 
 	material matte_white;
@@ -375,9 +375,11 @@ std::pair<scene, camera> fluid_box(vec3d min, vec3d max) {
 		light_blue
 	);
 
+	double tan_half_y = std::tan(0.5 * fovy), tan_half_x = asp_ratio * tan_half_y;
+	double dist_y = 0.5 * size.y / tan_half_y, dist_x = 0.5 * size.x / tan_half_x;
 	camera cam = camera::from_parameters(
-		vec3d(center.x, center.y, min.z - 30.0), center, vec3d(0.0, 1.0, 0.0),
-		90.0 * constants::pi / 180.0, 1.0
+		vec3d(center.x, center.y, min.z - std::max(dist_x, dist_y) - 10.0), center, vec3d(0.0, 1.0, 0.0),
+		fovy, asp_ratio
 	);
 
 	return { std::move(result), cam };

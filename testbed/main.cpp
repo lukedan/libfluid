@@ -16,6 +16,7 @@
 #include <fluid/data_structures/grid.h>
 #include <fluid/mesher.h>
 #include <fluid/data_structures/point_cloud.h>
+#include <fluid/math/constants.h>
 
 #include <fluid/renderer/path_tracer.h>
 #include <fluid/renderer/rendering.h>
@@ -30,8 +31,6 @@ using fluid::vec3s;
 
 using namespace fluid::renderer;
 
-#define USE_OBSTACLE 1
-
 std::atomic_bool
 sim_paused = true,
 sim_reset = true,
@@ -43,6 +42,7 @@ std::mutex sim_particles_lock;
 std::vector<fluid::simulation::particle> sim_particles;
 fluid::grid3<std::size_t> sim_grid_occupation;
 fluid::grid3<vec3d> sim_grid_velocities;
+std::atomic<std::size_t> sim_config = 0;
 bool sim_mesh_valid = false;
 
 fluid::semaphore sim_mesher_sema;
@@ -143,39 +143,64 @@ void simulation_thread() {
 		source->velocity = vec3d(200.0, 0.0, 0.0);
 		source->coerce_velocity = true;*/
 
-		sim.sources.emplace_back(std::move(source));
-	}
-
-	{
-#if USE_OBSTACLE
-		sim.grid().grid().for_each(
-			[](vec3s, fluid::mac_grid::cell &cell) {
-				cell.cell_type = fluid::mac_grid::cell::type::solid;
-			}
-		);
-		sim.grid().grid().for_each_in_range_checked(
-			[](vec3s, fluid::mac_grid::cell &cell) {
-				cell.cell_type = fluid::mac_grid::cell::type::air;
-			},
-			vec3s(1, 1, 1), vec3s(49, 49, 49)
-				);
-#endif
+		/*sim.sources.emplace_back(std::move(source));*/
 	}
 
 	while (true) {
 		if (sim_reset) {
 			sim.particles().clear();
+			// reset solid cells
+			sim.grid().grid().for_each(
+				[](vec3s, fluid::mac_grid::cell &cell) {
+					cell.cell_type = fluid::mac_grid::cell::type::air;
+				}
+			);
+			// reset fluid sources
+			sim.sources.clear();
 
-			/*sim.seed_box(vec3d(20, 20, 20), vec3d(10, 10, 10));*/
-			/*sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));*/
-			/*sim.seed_box(vec3d(10, 10, 10), vec3d(30, 30, 30));*/
-			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 10.0);*/
-			/*sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);*/
+			switch (sim_config) {
+			case 0:
+				sim.seed_box(vec3d(15, 15, 15), vec3d(20, 20, 20));
+				break;
+			case 1:
+				sim.seed_sphere(vec3d(25.0, 25.0, 25.0), 15.0);
+				break;
+			case 2:
+				sim.seed_sphere(vec3d(25, 44, 25), 5);
+				sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));
+				break;
+			case 3:
+				sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));
+				break;
+			case 4:
+				{
+					// fluid source
+					auto source = std::make_unique<fluid::source>();
+					for (std::size_t x = 1; x < 5; ++x) {
+						for (std::size_t y = 25; y < 35; ++y) {
+							for (std::size_t z = 20; z < 30; ++z) {
+								source->cells.emplace_back(x, y, z);
+							}
+						}
+					}
+					source->velocity = vec3d(200.0, 0.0, 0.0);
+					source->coerce_velocity = true;
+					sim.sources.emplace_back(std::move(source));
 
-			/*sim.seed_box(vec3d(0, 0, 0), vec3d(10, 50, 50));*/
-
-			/*sim.seed_sphere(vec3d(25, 40, 25), 5);
-			sim.seed_box(vec3d(0, 0, 0), vec3d(50, 15, 50));*/
+					// spherical obstacle
+					sim.grid().grid().for_each_in_range_unchecked(
+						[](vec3s cell, fluid::mac_grid::cell &c) {
+							vec3d diff = vec3d(cell) + 0.5 * vec3d(sim_cell_size, sim_cell_size, sim_cell_size);
+							diff -= vec3d(25.0, 25.0, 25.0);
+							if (diff.squared_length() < 100.0) {
+								c.cell_type = fluid::mac_grid::cell::type::solid;
+							}
+						},
+						vec3s(15, 15, 15), vec3s(35, 35, 35)
+							);
+				}
+				break;
+			}
 
 			sim.reset_space_hash();
 
@@ -238,6 +263,14 @@ image<fluid::vec3<std::uint8_t>> rend_image;
 pcg32 rend_random;
 bidirectional_path_tracer rend_tracer;
 std::size_t rend_spp = 0;
+
+void update_scene(scene &&sc, camera &cam) {
+	rend_scene = std::move(sc);
+	rend_scene.finish();
+	rend_cam = cam;
+	rend_accum = image<spectrum>(rend_accum.pixels.get_size());
+	rend_spp = 0;
+}
 
 enum class particle_visualize_mode : unsigned char {
 	none,
@@ -337,49 +370,94 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			}
 			break;
 
-		case GLFW_KEY_F5:
+		case GLFW_KEY_1:
 			{
-				auto [sc, cam] = cornell_box_two_lights();
-				rend_scene = std::move(sc);
-				rend_scene.finish();
-				rend_cam = cam;
-				rend_accum = image<spectrum>(rend_accum.pixels.get_size());
-				rend_spp = 0;
+				auto [sc, cam] = cornell_box_two_lights(rend_accum.aspect_ratio());
+				update_scene(std::move(sc), cam);
 			}
 			break;
 
-		case GLFW_KEY_F6:
+		case GLFW_KEY_2:
+			{
+				auto [sc, cam] = glass_ball_box(rend_accum.aspect_ratio());
+				update_scene(std::move(sc), cam);
+			}
+			break;
+
+		case GLFW_KEY_0:
 			{
 				fluid::mesher::mesh_t mesh;
 				{
 					std::lock_guard<std::mutex> guard(sim_mesh_lock);
 					mesh = sim_mesh;
 				}
+				mesh.reverse_face_directions();
 				mesh.generate_normals();
 				vec3d min = sim_grid_offset;
 				vec3d max = min + vec3d(sim_grid_size) * sim_cell_size;
-				auto [sc, cam] = fluid_box(min, max);
-				entity_info info;
-				auto &water = info.mat.value.emplace<materials::specular_transmission>();
-				water.index_of_refraction = 1.33;
-				water.skin.modulation = spectrum::identity;
-				sc.add_mesh_entity(sim_mesh, fluid::rmat3x4d::identity(), info);
-				rend_scene = std::move(sc);
-				rend_scene.finish();
-				rend_cam = cam;
-				rend_accum = image<spectrum>(rend_accum.pixels.get_size());
-				rend_spp = 0;
+				auto [sc, cam] = fluid_box(min, max, 30.0 * fluid::constants::pi / 180.0, rend_accum.aspect_ratio());
+
+				{ // add water
+					entity_info info;
+					auto &water = info.mat.value.emplace<materials::specular_transmission>();
+					water.index_of_refraction = 1.7;
+					water.skin.modulation = spectrum::identity;
+					sc.add_mesh_entity(mesh, fluid::rmat3x4d::identity(), info);
+				}
+
+				switch (sim_config) {
+				case 4:
+					{ // add sphere
+						entity_info info;
+						auto &lambert = info.mat.value.emplace<materials::lambertian_reflection>();
+						lambert.reflectance.modulation = spectrum::from_rgb(vec3d(0.2, 0.5, 0.8));
+						primitive prim;
+						primitives::sphere_primitive sphere;
+						sphere.set_transformation(fluid::transform::scale_rotate_translate(
+							vec3d(10.0, 10.0, 10.0), vec3d(), vec3d(25.0, 25.0, 25.0)
+						));
+						sc.add_primitive_entity(sphere, info);
+					}
+					break;
+				}
+
+				update_scene(std::move(sc), cam);
 			}
 			break;
 
-		case GLFW_KEY_F7:
+		case GLFW_KEY_5:
+			sim_config = 4;
+			sim_reset = true;
+			break;
+
+		case GLFW_KEY_6:
+			sim_config = 3;
+			sim_reset = true;
+			break;
+
+		case GLFW_KEY_7:
+			sim_config = 2;
+			sim_reset = true;
+			break;
+
+		case GLFW_KEY_8:
+			sim_config = 1;
+			sim_reset = true;
+			break;
+
+		case GLFW_KEY_9:
+			sim_config = 0;
+			sim_reset = true;
+			break;
+
+		case GLFW_KEY_F5:
 			{
 				std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 				image<spectrum> img = render_naive<true>(
 					[](ray r, pcg32 &rnd) {
 						return rend_tracer.incoming_light(rend_scene, r, rnd);
 					},
-					rend_cam, rend_accum.pixels.get_size(), 100, rend_random
+					rend_cam, 2 * rend_accum.pixels.get_size(), 400, rend_random
 						);
 				img.save_ppm(
 					"test.ppm",
@@ -398,7 +476,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			}
 			break;
 
-		case GLFW_KEY_F8:
+		case GLFW_KEY_F6:
 			{
 				rend_accum.save_ppm(
 					"test.ppm",
@@ -789,6 +867,8 @@ int main() {
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			}
 
+			double scale = std::min(width / static_cast<double>(sz.x), height / static_cast<double>(sz.y));
+
 			glColor3d(1.0, 1.0, 1.0);
 			glBegin(GL_TRIANGLE_STRIP);
 
@@ -796,13 +876,13 @@ int main() {
 			glVertex2d(0.0, 0.0);
 
 			glTexCoord2d(1.0, 0.0);
-			glVertex2d(sz.x, 0.0);
+			glVertex2d(sz.x * scale, 0.0);
 
 			glTexCoord2d(0.0, 1.0);
-			glVertex2d(0.0, sz.y);
+			glVertex2d(0.0, sz.y * scale);
 
 			glTexCoord2d(1.0, 1.0);
-			glVertex2d(sz.x, sz.y);
+			glVertex2d(sz.x * scale, sz.y * scale);
 
 			glEnd();
 
