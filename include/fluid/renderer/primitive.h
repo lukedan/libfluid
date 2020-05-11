@@ -42,7 +42,10 @@ namespace fluid::renderer {
 				point1, ///< The first vertex of this triangle.
 				edge12, ///< Edge from the first vertex to the second vertex.
 				edge13, ///< Edge from the first vertex to the third vertex.
-				geometric_normal; ///< The geometric normal of this triangle.
+				geometric_normal, ///< The geometric normal of this triangle.
+				normal_p1, ///< Shading normal at \ref point1.
+				normal_e12, ///< Shading normal difference between point 1 and point 2.
+				normal_e13; ///< Shading normal difference between point 1 and point 3.
 			vec2d
 				uv_p1, ///< The UV of \ref point1.
 				uv_e12, ///< The UV difference of \ref edge12.
