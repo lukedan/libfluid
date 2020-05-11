@@ -254,17 +254,17 @@ namespace fluid {
 
 		/// Wrapper around \ref _for_each_impl(). Call this with \p std::make_index_sequence<Dim>.
 		template <std::size_t ...Dims, typename Callback> FLUID_FORCEINLINE void _for_each_impl_wrapper(
-			Callback &cb, size_type min, size_type max, std::index_sequence<Dims...>
+			Callback &&cb, size_type min, size_type max, std::index_sequence<Dims...>
 		) {
 			size_type cur = min;
 			auto it = _cells.begin() + index_to_raw(min);
-			_for_each_impl<(Dim - 1 - Dims)...>(cb, it, min, max, cur);
+			_for_each_impl<(Dim - 1 - Dims)...>(std::forward<Callback>(cb), it, min, max, cur);
 		}
 		/// The implementation of the \ref for_each() function, for one dimension.
 		template <
 			std::size_t ThisDim, std::size_t ...OtherDims, typename Callback, typename It
 		> FLUID_FORCEINLINE void _for_each_impl(
-			Callback &cb, const It &it, size_type min, size_type max, size_type &cur
+			Callback &&cb, const It &it, size_type min, size_type max, size_type &cur
 		) const {
 			if (min[ThisDim] >= max[ThisDim]) {
 				return;
@@ -272,15 +272,15 @@ namespace fluid {
 			It my_it = it;
 			std::size_t &i = cur[ThisDim];
 			i = min[ThisDim];
-			_for_each_impl<OtherDims...>(cb, my_it, min, max, cur);
+			_for_each_impl<OtherDims...>(std::forward<Callback>(cb), my_it, min, max, cur);
 			for (++i; i < max[ThisDim]; ++i) {
 				my_it += _layer_offset[ThisDim];
-				_for_each_impl<OtherDims...>(cb, my_it, min, max, cur);
+				_for_each_impl<OtherDims...>(std::forward<Callback>(cb), my_it, min, max, cur);
 			}
 		}
 		/// End of recursion, where the callback is actually invoked.
 		template <typename Callback, typename It> FLUID_FORCEINLINE void _for_each_impl(
-			Callback &cb, It it, size_type min, size_type max, size_type cur
+			Callback &&cb, It it, size_type min, size_type max, size_type cur
 		) const {
 			cb(cur, *it);
 		}

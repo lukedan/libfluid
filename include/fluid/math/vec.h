@@ -16,41 +16,41 @@
 namespace fluid {
 	namespace vec_ops {
 		namespace _details {
-			/// Wrapper around \ref for_each_impl().
-			template <std::size_t ...Is, typename Func, typename ...Vecs> inline void for_each(
-				std::index_sequence<Is...>, const Func &func, Vecs &...vecs
-			) {
-				for_each_impl<Is...>(func, vecs...);
+			/// End of recursion.
+			template <typename Func, typename ...Vecs> inline void for_each_impl(Func&&, Vecs&&...) {
 			}
 			/// Implementation of \ref for_each().
 			template <std::size_t I, std::size_t ...Is, typename Func, typename ...Vecs> inline void for_each_impl(
-				const Func &func, Vecs &...vecs
+				Func &&func, Vecs &&...vecs
 			) {
 				func(vecs[I]...);
-				for_each_impl<Is...>(func, vecs...);
+				for_each_impl<Is...>(std::forward<Func>(func), std::forward<Vecs>(vecs)...);
 			}
-			/// End of recursion.
-			template <typename Func, typename ...Vecs> inline void for_each_impl(const Func&, Vecs&...) {
+			/// Wrapper around \ref for_each_impl().
+			template <std::size_t ...Is, typename Func, typename ...Vecs> inline void for_each(
+				std::index_sequence<Is...>, Func &&func, Vecs &&...vecs
+			) {
+				for_each_impl<Is...>(std::forward<Func>(func), std::forward<Vecs>(vecs)...);
 			}
 		}
 		/// Calls the given function on each member of each input vector in a Python <tt>zip</tt>-like fashion, with
 		/// manual loop unrolling. This function requires that the \p FirstVec type has a static constexpr \p size()
 		/// member. Use whenever possible.
 		template <typename Func, typename FirstVec, typename ...OtherVecs> inline void for_each(
-			const Func &func, FirstVec &first, OtherVecs &...others
+			Func &&func, FirstVec &&first, OtherVecs &&...others
 		) {
-			assert(((others.size() == FirstVec::size()) && ...));
-			_details::for_each(std::make_index_sequence<FirstVec::size()>(), func, first, others...);
+			assert(((others.size() == std::decay_t<FirstVec>::size()) && ...));
+			_details::for_each(
+				std::make_index_sequence<std::decay_t<FirstVec>::size()>(),
+				std::forward<Func>(func), std::forward<FirstVec>(first), std::forward<OtherVecs>(others)...
+			);
 		}
 
 		namespace _details {
-			/// Wrapper around \ref apply_to_impl().
+			/// End of recursion.
 			template <
-				std::size_t ...Is, typename Res, typename Func, typename ...Vecs
-			> FLUID_FORCEINLINE void apply_to(
-				std::index_sequence<Is...>, Res &out, const Func &func, const Vecs &...vecs
-			) {
-				apply_to_impl<Is...>(out, func, vecs...);
+				typename Res, typename Func, typename ...Vecs
+			> FLUID_FORCEINLINE void apply_to_impl(Res&, const Func&, const Vecs&...) {
 			}
 			/// Implementation of \ref apply_to().
 			template <
@@ -59,10 +59,13 @@ namespace fluid {
 				out[I] = func(vecs[I]...);
 				apply_to_impl<Is...>(out, func, vecs...);
 			}
-			/// End of recursion.
+			/// Wrapper around \ref apply_to_impl().
 			template <
-				typename Res, typename Func, typename ...Vecs
-			> FLUID_FORCEINLINE void apply_to_impl(Res&, const Func&, const Vecs&...) {
+				std::size_t ...Is, typename Res, typename Func, typename ...Vecs
+			> FLUID_FORCEINLINE void apply_to(
+				std::index_sequence<Is...>, Res &out, const Func &func, const Vecs &...vecs
+			) {
+				apply_to_impl<Is...>(out, func, vecs...);
 			}
 		}
 		/// Applies the given function to all elements of the input vectors, with manual loop unrolling. This
@@ -122,12 +125,12 @@ namespace fluid {
 		namespace memberwise {
 			/// Memberwise multiplication.
 			template <typename Vec> [[nodiscard]] FLUID_FORCEINLINE Vec mul(const Vec &lhs, const Vec &rhs) {
-				return apply<Vec>(std::multiplies(), lhs, rhs);
+				return apply<Vec>(std::multiplies<>(), lhs, rhs);
 			}
 
 			/// Memberwise division.
 			template <typename Vec> [[nodiscard]] FLUID_FORCEINLINE Vec div(const Vec &lhs, const Vec &rhs) {
-				return apply<Vec>(std::divides(), lhs, rhs);
+				return apply<Vec>(std::divides<>(), lhs, rhs);
 			}
 		}
 
@@ -262,26 +265,26 @@ namespace fluid {
 			// arithmetic
 			/// In-place addition.
 			FLUID_FORCEINLINE Derived &operator+=(const Derived &rhs) {
-				vec_ops::apply_to(*_derived(), std::plus(), *_derived(), rhs);
+				vec_ops::apply_to(*_derived(), std::plus<>(), *_derived(), rhs);
 				return *_derived();
 			}
 			/// Addition.
-			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator+(const Derived &lhs, const Derived &rhs) {
+			[[nodiscard]] FLUID_FORCEINLINE friend Derived operator+(const Derived &lhs, const Derived &rhs) {
 				return Derived(lhs) += rhs;
 			}
 
 			/// In-place subtraction.
 			FLUID_FORCEINLINE Derived &operator-=(const Derived &rhs) {
-				vec_ops::apply_to(*_derived(), std::minus(), *_derived(), rhs);
+				vec_ops::apply_to(*_derived(), std::minus<>(), *_derived(), rhs);
 				return *_derived();
 			}
 			/// Subtraction.
-			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator-(const Derived &lhs, const Derived &rhs) {
+			[[nodiscard]] FLUID_FORCEINLINE friend Derived operator-(const Derived &lhs, const Derived &rhs) {
 				return Derived(lhs) -= rhs;
 			}
 			/// Negation.
-			FLUID_FORCEINLINE [[nodiscard]] friend Derived operator-(const Derived &lhs) {
-				return vec_ops::apply<Derived>(std::negate(), lhs);
+			[[nodiscard]] FLUID_FORCEINLINE friend Derived operator-(const Derived &lhs) {
+				return vec_ops::apply<Derived>(std::negate<>(), lhs);
 			}
 
 			/// In-place scalar division.
@@ -294,7 +297,7 @@ namespace fluid {
 				return *_derived();
 			}
 			/// Scalar division.
-			template <typename U> FLUID_FORCEINLINE [[nodiscard]] friend Derived operator/(
+			template <typename U> [[nodiscard]] FLUID_FORCEINLINE friend Derived operator/(
 				Derived lhs, const U &rhs
 			) {
 				return lhs /= rhs;
@@ -310,13 +313,13 @@ namespace fluid {
 				return *_derived();
 			}
 			/// Scalar multiplication.
-			template <typename U> FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(
+			template <typename U> [[nodiscard]] FLUID_FORCEINLINE friend Derived operator*(
 				Derived lhs, const U &rhs
 			) {
 				return lhs *= rhs;
 			}
 			/// Scalar multiplication.
-			template <typename U> FLUID_FORCEINLINE [[nodiscard]] friend Derived operator*(
+			template <typename U> [[nodiscard]] FLUID_FORCEINLINE friend Derived operator*(
 				const U &lhs, Derived rhs
 			) {
 				return rhs *= lhs;
@@ -325,7 +328,7 @@ namespace fluid {
 
 			// comparison
 			/// Equality.
-			template <typename Dummy = void> FLUID_FORCEINLINE [[nodiscard]] friend _valid_for_integral_t<
+			template <typename Dummy = void> [[nodiscard]] FLUID_FORCEINLINE friend _valid_for_integral_t<
 				bool, Dummy
 			> operator==(const Derived &lhs, const Derived &rhs) {
 				bool res = true;
@@ -340,7 +343,7 @@ namespace fluid {
 				return res;
 			}
 			/// Inequality.
-			template <typename Dummy = void> FLUID_FORCEINLINE [[nodiscard]] friend _valid_for_integral_t<
+			template <typename Dummy = void> [[nodiscard]] FLUID_FORCEINLINE friend _valid_for_integral_t<
 				bool, Dummy
 			> operator!=(const Derived &lhs, const Derived &rhs) {
 				return !(lhs == rhs);
@@ -414,12 +417,12 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
+		[[nodiscard]] FLUID_FORCEINLINE T &at(std::size_t i) {
 			assert(i < N);
 			return v[i];
 		}
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
+		[[nodiscard]] FLUID_FORCEINLINE T at(std::size_t i) const {
 			assert(i < N);
 			return v[i];
 		}
@@ -442,12 +445,12 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
+		[[nodiscard]] FLUID_FORCEINLINE T &at(std::size_t i) {
 			assert(i < 2);
 			return (&x)[i];
 		}
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
+		[[nodiscard]] FLUID_FORCEINLINE T at(std::size_t i) const {
 			assert(i < 2);
 			return (&x)[i];
 		}
@@ -477,12 +480,12 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
+		[[nodiscard]] FLUID_FORCEINLINE T &at(std::size_t i) {
 			assert(i < 3);
 			return (&x)[i];
 		}
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
+		[[nodiscard]] FLUID_FORCEINLINE T at(std::size_t i) const {
 			assert(i < 3);
 			return (&x)[i];
 		}
@@ -516,12 +519,12 @@ namespace fluid {
 		}
 
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T &at(std::size_t i) {
+		[[nodiscard]] FLUID_FORCEINLINE T &at(std::size_t i) {
 			assert(i < 4);
 			return (&x)[i];
 		}
 		/// Indexing.
-		FLUID_FORCEINLINE [[nodiscard]] T at(std::size_t i) const {
+		[[nodiscard]] FLUID_FORCEINLINE T at(std::size_t i) const {
 			assert(i < 4);
 			return (&x)[i];
 		}

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <ostream>
 
 #include "../math/vec.h"
 

@@ -20,7 +20,7 @@ namespace fluid {
 		/// Loads a point cloud from the given input stream. This function keeps reading until reading fails or the
 		/// desired number of points is reached.
 		template <typename Callback> inline void load_from_naive(
-			std::istream &in, Callback &cb, std::size_t count = std::numeric_limits<std::size_t>::max()
+			std::istream &in, Callback &&cb, std::size_t count = std::numeric_limits<std::size_t>::max()
 		) {
 			for (std::size_t i = 0; i < count; ++i) {
 				vec3d v;

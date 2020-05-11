@@ -5,9 +5,12 @@
 
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 #ifdef _MSC_VER
 #	define FLUID_FORCEINLINE __forceinline
+#elif defined(__GNUC__)
+#	define FLUID_FORCEINLINE [[gnu::always_inline]] inline
 #else
 #	define FLUID_FORCEINLINE inline
 #endif

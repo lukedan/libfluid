@@ -64,7 +64,7 @@ namespace fluid::renderer {
 		}
 
 		/// Saves this image.
-		template <typename ToRGB> void save_ppm(std::filesystem::path p, ToRGB &&torgb) const {
+		template <typename ToRGB> void save_ppm(const std::filesystem::path &p, ToRGB &&torgb) const {
 			std::ofstream fout(p);
 			fout << "P3\n" << pixels.get_size().x << " " << pixels.get_size().y << "\n255\n";
 			for (std::size_t y = 0; y < pixels.get_size().y; ++y) {

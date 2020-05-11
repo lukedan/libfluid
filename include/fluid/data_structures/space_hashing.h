@@ -72,16 +72,16 @@ namespace fluid {
 		}
 
 		/// Calls the given callback for all objects in the given cell.
-		template <typename Callback> void for_all_objects_in(vec3s cell, Callback &cb) {
-			_for_all_objects_in_cell(_table(cell), cb);
+		template <typename Callback> void for_all_objects_in(vec3s cell, Callback &&cb) {
+			_for_all_objects_in_cell(_table(cell), std::forward<Callback>(cb));
 		}
 		/// Calls the given callback function for all objects near the given cell.
 		template <typename Callback> void for_all_nearby_objects(
-			vec3s cell, vec3s min_offset, vec3s max_offset, Callback &cb
+			vec3s cell, vec3s min_offset, vec3s max_offset, Callback &&cb
 		) {
 			_table.for_each_in_range_checked(
 				[this, &cb](vec3s, _cell &cell) {
-					_for_all_objects_in_cell(cell, cb);
+					_for_all_objects_in_cell(cell, std::forward<Callback>(cb));
 				},
 				cell, min_offset, max_offset
 					);
@@ -110,7 +110,7 @@ namespace fluid {
 		std::vector<_chain_elem> _chain; ///< The linked list.
 
 		/// Calls the given callback for all objects in the given cell.
-		template <typename Callback> void _for_all_objects_in_cell(const _cell &cell, Callback &cb) {
+		template <typename Callback> void _for_all_objects_in_cell(const _cell &cell, Callback &&cb) {
 			for (std::size_t i = 0, id = cell.head; i < cell.count; ++i) {
 				_chain_elem &elem = _chain[id];
 				cb(elem.object);

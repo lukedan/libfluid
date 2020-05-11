@@ -210,7 +210,7 @@ namespace fluid {
 
 		/// Calls the callback function for all particles in the specified region.
 		template <typename Cb> void _for_all_nearby_particles(
-			vec3s center, vec3s diffmin, vec3s diffmax, Cb &callback
+			vec3s center, vec3s diffmin, vec3s diffmax, Cb &&callback
 		) {
 			_space_hash.for_each_in_range_checked(
 				[this, &callback](vec3s, const _cell_particles &cell) {

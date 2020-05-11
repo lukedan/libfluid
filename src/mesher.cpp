@@ -356,7 +356,7 @@ namespace fluid {
 							vec3d pos = *p;
 							has_particles = true;
 							double w = _kernel(
-							(pos - grid_pos).squared_length() / (particle_extent * particle_extent)
+								(pos - grid_pos).squared_length() / (particle_extent * particle_extent)
 							);
 							tot_weight += w;
 							tot_rad += w * r;

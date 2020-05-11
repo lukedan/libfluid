@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#include "math/vec.h"
+#include "../math/vec.h"
 
 namespace fluid {
 	/// A fluid source.

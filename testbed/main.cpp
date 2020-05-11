@@ -8,8 +8,8 @@
 #	define NOMINMAX
 #	include <Windows.h>
 #endif
-#include <GL/GL.h>
-#include <GL/GLU.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
 #include <GLFW/glfw3.h>
 
 #include <fluid/simulation.h>
@@ -121,30 +121,6 @@ void simulation_thread() {
 		}
 		std::cout << "    max particle velocity = " << std::sqrt(maxv) << "\n";
 	};
-
-	{
-		auto source = std::make_unique<fluid::source>();
-
-		for (std::size_t x = 20; x < 30; ++x) {
-			for (std::size_t y = 40; y < 45; ++y) {
-				for (std::size_t z = 20; z < 30; ++z) {
-					source->cells.emplace_back(x, y, z);
-				}
-			}
-		}
-
-		/*for (std::size_t x = 5; x < 10; ++x) {
-			for (std::size_t y = 30; y < 40; ++y) {
-				for (std::size_t z = 20; z < 30; ++z) {
-					source->cells.emplace_back(x, y, z);
-				}
-			}
-		}
-		source->velocity = vec3d(200.0, 0.0, 0.0);
-		source->coerce_velocity = true;*/
-
-		/*sim.sources.emplace_back(std::move(source));*/
-	}
 
 	while (true) {
 		if (sim_reset) {
