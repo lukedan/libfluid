@@ -11,6 +11,8 @@
 #include "common.h"
 #include "camera.h"
 
+#define FLUID_RENDERER_PARALLEL
+
 namespace fluid::renderer {
 	/// Renders the scene to an image using an naive method for parallelization.
 	template <bool Monitor = false, typename Incoming> image<spectrum> render_naive(
@@ -38,10 +40,14 @@ namespace fluid::renderer {
 				size.x * size.y
 					);
 		}
-#pragma omp parallel
+#ifdef FLUID_RENDERER_PARALLEL
+#	pragma omp parallel
+#endif
 		{
 			pcg32 thread_rnd(random());
-#pragma omp for
+#ifdef FLUID_RENDERER_PARALLEL
+#	pragma omp for
+#endif
 			for (int y = 0; y < size.y; ++y) {
 				for (std::size_t x = 0; x < size.x; ++x) {
 					spectrum res;
@@ -65,15 +71,38 @@ namespace fluid::renderer {
 	}
 
 	/// Accumulates incoming light to the given buffer using an naive method for parallelization.
-	template <bool Monitor = false, typename Incoming> void accumulate_naive(
+	template <bool Monitor = true, typename Incoming> void accumulate_naive(
 		Incoming &&li, image<spectrum> &buf, const camera &cam, std::size_t spp, pcg32 &random
 	) {
+		using namespace std::chrono_literals;
+
 		std::uniform_real_distribution<double> dist(0.0, 1.0);
 		vec2d screen_div = vec_ops::memberwise::div(vec2d(1.0, 1.0), vec2d(buf.pixels.get_size()));
-#pragma omp parallel
+		[[maybe_unused]] std::atomic<std::size_t> finished = 0;
+		[[maybe_unused]] std::thread monitor_thread;
+		if constexpr (Monitor) {
+			monitor_thread = std::thread(
+				[&finished](std::size_t total) {
+					while (true) {
+						std::size_t fin = finished;
+						std::cout << fin << " / " << total << " (" << (100.0 * fin / static_cast<double>(total)) << "%)" << std::endl;
+						if (fin == total) {
+							break;
+						}
+						std::this_thread::sleep_for(100ms);
+					}
+				},
+				buf.pixels.get_size().x * buf.pixels.get_size().y
+					);
+		}
+#ifdef FLUID_RENDERER_PARALLEL
+#	pragma omp parallel
+#endif
 		{
 			pcg32 thread_rnd(random());
-#pragma omp for
+#ifdef FLUID_RENDERER_PARALLEL
+#	pragma omp for
+#endif
 			for (int y = 0; y < buf.pixels.get_size().y; ++y) {
 				for (std::size_t x = 0; x < buf.pixels.get_size().x; ++x) {
 					spectrum res;
@@ -84,8 +113,14 @@ namespace fluid::renderer {
 						res += li(cam.get_ray(pos), thread_rnd);
 					}
 					buf.pixels(x, y) += res;
+					if constexpr (Monitor) {
+						++finished;
+					}
 				}
 			}
+		}
+		if constexpr (Monitor) {
+			monitor_thread.join();
 		}
 	}
 

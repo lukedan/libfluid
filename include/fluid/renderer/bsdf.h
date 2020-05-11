@@ -9,6 +9,12 @@
 #include "spectrum.h"
 
 namespace fluid::renderer {
+	/// Indicates what is being transported along rays.
+	enum class transport_mode : std::uint8_t {
+		radiance, ///< Radiance.
+		importance ///< Importance. (?)
+	};
+
 	namespace bsdfs {
 		/// An outgoing ray sample produced by a material.
 		struct outgoing_ray_sample {
@@ -22,12 +28,12 @@ namespace fluid::renderer {
 			constexpr static bool double_sided = true; ///< Controls whether or not this material is double-sided.
 
 			/// For lambertian materials, the \p f term is constant.
-			spectrum f(vec3d, vec3d) const;
+			spectrum f(vec3d, vec3d, transport_mode) const;
 			/// Returns the result of \ref fluid::warping::pdf_unit_hemisphere_from_unit_square_cosine();
 			double pdf(vec3d, vec3d) const;
 			/// The Lambertian material samples rays using
 			/// \ref fluid::warping::unit_hemisphere_from_unit_square_cosine();
-			outgoing_ray_sample sample_f(vec3d, vec2d) const;
+			outgoing_ray_sample sample_f(vec3d, vec2d, transport_mode) const;
 
 			/// Returns \p false.
 			bool is_delta() const;
@@ -38,11 +44,11 @@ namespace fluid::renderer {
 		/// BRDF of specular reflection.
 		struct specular_reflection_brdf {
 			/// The \p f term is zero unless the two rays are exactly mirrored, but we don't check for that.
-			spectrum f(vec3d, vec3d) const;
+			spectrum f(vec3d, vec3d, transport_mode) const;
 			/// The probability density function is a delta function and is not modeled here.
 			double pdf(vec3d, vec3d) const;
 			/// Simply mirrors the input ray and cancels out the Lambertian term.
-			outgoing_ray_sample sample_f(vec3d, vec2d) const;
+			outgoing_ray_sample sample_f(vec3d, vec2d, transport_mode) const;
 
 			/// Returns \p true.
 			bool is_delta() const;
@@ -53,11 +59,11 @@ namespace fluid::renderer {
 		/// BSDF of specular transmission.
 		struct specular_transmission_bsdf {
 			/// The \p f term is zero unless the two rays match exactly, but we don't check for that.
-			spectrum f(vec3d, vec3d) const;
+			spectrum f(vec3d, vec3d, transport_mode) const;
 			/// The probability density function is a delta function and is not modeled here.
 			double pdf(vec3d, vec3d) const;
 			/// Based on the Fresnel reflectance, reflects or refracts the incoming ray.
-			outgoing_ray_sample sample_f(vec3d, vec2d) const;
+			outgoing_ray_sample sample_f(vec3d, vec2d, transport_mode) const;
 
 			/// Returns \p true.
 			bool is_delta() const;
@@ -79,12 +85,12 @@ namespace fluid::renderer {
 
 		/// Returns the value of the \p f term in the light transport equation. The input vectors are assumed to be
 		/// normalized and in tangent space.
-		spectrum f(vec3d norm_in, vec3d norm_out) const;
+		spectrum f(vec3d norm_in, vec3d norm_out, transport_mode) const;
 		/// Returns the probability of the given ray being sampled by the material. The input vectors are assumed to
 		/// be normalized and in tangent space.
 		double pdf(vec3d norm_in, vec3d norm_out) const;
 		/// Samples an outgoing ray given a incoming ray and a random sample inside a unit square.
-		bsdfs::outgoing_ray_sample sample_f(vec3d norm_in, vec2d random) const;
+		bsdfs::outgoing_ray_sample sample_f(vec3d norm_in, vec2d random, transport_mode) const;
 
 		/// Returns whether this BSDF contains a delta distribution.
 		bool is_delta() const;

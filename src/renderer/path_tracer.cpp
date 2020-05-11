@@ -26,8 +26,9 @@ namespace fluid::renderer {
 
 			// sample outgoing ray
 			vec3d incoming_direction = isect.tangent * -cur_ray.direction;
-			bsdfs::outgoing_ray_sample sample =
-				isect.surface_bsdf.sample_f(incoming_direction, vec2d(dist(random), dist(random)));
+			bsdfs::outgoing_ray_sample sample = isect.surface_bsdf.sample_f(
+				incoming_direction, vec2d(dist(random), dist(random)), transport_mode::radiance
+			);
 			spectrum isect_atten = sample.reflectance * (std::abs(sample.norm_out_direction_tangent.y) / sample.pdf);
 
 			cur_ray = isect.spawn_ray(sample.norm_out_direction_tangent);

@@ -9,20 +9,22 @@
 
 namespace fluid::renderer {
 	namespace bsdfs {
-		spectrum lambertian_reflection_brdf::f(vec3d, vec3d) const {
-			return reflectance / constants::pi;
+		spectrum lambertian_reflection_brdf::f(vec3d in, vec3d out, transport_mode) const {
+			return in.y * out.y > 0.0 ? reflectance / constants::pi : spectrum();
 		}
 
-		outgoing_ray_sample lambertian_reflection_brdf::sample_f(vec3d norm_in, vec2d random) const {
+		outgoing_ray_sample lambertian_reflection_brdf::sample_f(
+			vec3d norm_in, vec2d random, transport_mode mode
+		) const {
 			outgoing_ray_sample result;
 			result.norm_out_direction_tangent = warping::unit_hemisphere_from_unit_square_cosine(random);
+			result.pdf = warping::pdf_unit_hemisphere_from_unit_square_cosine(result.norm_out_direction_tangent);
 			if constexpr (double_sided) {
 				if (norm_in.y < 0.0) {
 					result.norm_out_direction_tangent.y = -result.norm_out_direction_tangent.y;
 				}
 			}
-			result.pdf = warping::pdf_unit_hemisphere_from_unit_square_cosine(result.norm_out_direction_tangent);
-			result.reflectance = f(norm_in, result.norm_out_direction_tangent);
+			result.reflectance = f(norm_in, result.norm_out_direction_tangent, mode);
 			return result;
 		}
 
@@ -43,11 +45,11 @@ namespace fluid::renderer {
 		}
 
 
-		spectrum specular_reflection_brdf::f(vec3d, vec3d) const {
+		spectrum specular_reflection_brdf::f(vec3d, vec3d, transport_mode) const {
 			return spectrum();
 		}
 
-		outgoing_ray_sample specular_reflection_brdf::sample_f(vec3d norm_in, vec2d random) const {
+		outgoing_ray_sample specular_reflection_brdf::sample_f(vec3d norm_in, vec2d random, transport_mode) const {
 			outgoing_ray_sample result;
 			result.norm_out_direction_tangent.x = -norm_in.x;
 			result.norm_out_direction_tangent.y = norm_in.y;
@@ -66,11 +68,13 @@ namespace fluid::renderer {
 		}
 
 
-		spectrum specular_transmission_bsdf::f(vec3d, vec3d) const {
+		spectrum specular_transmission_bsdf::f(vec3d, vec3d, transport_mode) const {
 			return spectrum();
 		}
 
-		outgoing_ray_sample specular_transmission_bsdf::sample_f(vec3d norm_in, vec2d random) const {
+		outgoing_ray_sample specular_transmission_bsdf::sample_f(
+			vec3d norm_in, vec2d random, transport_mode mode
+		) const {
 			outgoing_ray_sample result;
 			double eta_in = 1.0, eta_out = index_of_refraction, cos_in = norm_in.y, sign = 1.0;
 			if (cos_in < 0.0) {
@@ -93,6 +97,9 @@ namespace fluid::renderer {
 				result.norm_out_direction_tangent.y += (eta * cos_in - cos_out) * sign;
 				result.pdf = 1.0 - fres;
 				result.reflectance = (1.0 - fres) * skin / cos_out;
+				if (mode == transport_mode::radiance) {
+					result.reflectance *= eta * eta;
+				}
 			} else { // reflection
 				result.norm_out_direction_tangent = vec3d(-norm_in.x, norm_in.y, -norm_in.z);
 				result.pdf = fres;
@@ -111,10 +118,10 @@ namespace fluid::renderer {
 	}
 
 
-	spectrum bsdf::f(vec3d norm_in, vec3d norm_out) const {
+	spectrum bsdf::f(vec3d norm_in, vec3d norm_out, transport_mode mode) const {
 		return std::visit(
 			[&](const auto &v) {
-				return v.f(norm_in, norm_out);
+				return v.f(norm_in, norm_out, mode);
 			},
 			value
 				);
@@ -132,10 +139,10 @@ namespace fluid::renderer {
 	}
 
 	/// Samples an outgoing ray given a incoming ray and a random sample inside a unit square.
-	bsdfs::outgoing_ray_sample bsdf::sample_f(vec3d norm_in, vec2d random) const {
+	bsdfs::outgoing_ray_sample bsdf::sample_f(vec3d norm_in, vec2d random, transport_mode mode) const {
 		return std::visit(
 			[&](const auto &v) {
-				return v.sample_f(norm_in, random);
+				return v.sample_f(norm_in, random, mode);
 			},
 			value
 				);

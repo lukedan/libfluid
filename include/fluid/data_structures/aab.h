@@ -92,7 +92,7 @@ namespace fluid {
 			return max - min;
 		}
 		/// Computes the area (in two dimensions) or volume (in three or more dimensions) of this box.
-		T get_volume() const {
+		[[nodiscard]] T get_volume() const {
 			vec_type size = get_size();
 			T result = static_cast<T>(1);
 			vec_ops::for_each(
@@ -102,6 +102,11 @@ namespace fluid {
 				size
 					);
 			return result;
+		}
+
+		/// Returns the center of this box.
+		[[nodiscard]] vec_type get_center() const {
+			return (min + max) / static_cast<T>(2);
 		}
 
 		vec_type

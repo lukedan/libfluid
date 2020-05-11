@@ -348,6 +348,30 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			}
 			break;
 
+		case GLFW_KEY_F6:
+			{
+				fluid::mesher::mesh_t mesh;
+				{
+					std::lock_guard<std::mutex> guard(sim_mesh_lock);
+					mesh = sim_mesh;
+				}
+				mesh.generate_normals();
+				vec3d min = sim_grid_offset;
+				vec3d max = min + vec3d(sim_grid_size) * sim_cell_size;
+				auto [sc, cam] = fluid_box(min, max);
+				entity_info info;
+				auto &water = info.mat.value.emplace<materials::specular_transmission>();
+				water.index_of_refraction = 1.33;
+				water.skin.modulation = spectrum::identity;
+				sc.add_mesh_entity(sim_mesh, fluid::rmat3x4d::identity(), info);
+				rend_scene = std::move(sc);
+				rend_scene.finish();
+				rend_cam = cam;
+				rend_accum = image<spectrum>(rend_accum.pixels.get_size());
+				rend_spp = 0;
+			}
+			break;
+
 		case GLFW_KEY_F7:
 			{
 				std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
@@ -737,7 +761,7 @@ int main() {
 				auto t2 = std::chrono::high_resolution_clock::now();
 				std::cout <<
 					"sample time: " << std::chrono::duration<double>(t2 - t1).count() << "s / " <<
-					frame_spp << " samples\n";
+					frame_spp << " sample(s)\n";
 				std::cout << "total spp: " << rend_spp << "\n";
 
 				// copy to image

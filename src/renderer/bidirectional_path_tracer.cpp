@@ -63,7 +63,7 @@ namespace fluid::renderer {
 			double inv_sqr_dist = 1.0 / offset.squared_length();
 			offset *= std::sqrt(inv_sqr_dist);
 			return
-				warping::pdf_unit_hemisphere_from_unit_square() *
+				std::max(warping::pdf_unit_hemisphere_from_unit_square_cosine(tangent * offset), 0.0) *
 				inv_sqr_dist *
 				std::abs(vec_ops::dot(next.geometric_normal, offset));
 		}
@@ -80,7 +80,7 @@ namespace fluid::renderer {
 	/// \param pdf The probability density function of the direction of the initial ray.
 	/// \param rnd The random number generator.
 	void _trace_path(
-		_path_vec &out, const scene &sc, std::size_t max_bounces, ray r, double pdf,
+		_path_vec &out, const scene &sc, std::size_t max_bounces, ray r, double pdf, transport_mode mode,
 		double ray_offset, pcg32 &rnd
 	) {
 		std::uniform_real_distribution<double> dist(0.0, 1.0);
@@ -108,7 +108,7 @@ namespace fluid::renderer {
 			_vertex &prev_vert = out[out.size() - 2];
 			// sample bsdf for new ray
 			bsdfs::outgoing_ray_sample sample = vertex.surface_bsdf.sample_f(
-				incoming_direction_tangent, vec2d(dist(rnd), dist(rnd))
+				incoming_direction_tangent, vec2d(dist(rnd), dist(rnd)), mode
 			);
 			attenuation =
 				modulate(attenuation, sample.reflectance) *
@@ -249,6 +249,30 @@ namespace fluid::renderer {
 		return 1.0 / (1.0 + sum_ri);
 	}
 
+	/// Returns the generalized geometry term.
+	double _geometry(vec3d diff, vec3d n1, vec3d n2) {
+		double sqr_length = diff.squared_length();
+		return std::abs(vec_ops::dot(diff, n1) * vec_ops::dot(diff, n2)) / (sqr_length * sqr_length);
+	}
+	/// \overload
+	double _geometry(vec3d p1, vec3d p2, vec3d n1, vec3d n2) {
+		return _geometry(p2 - p1, n1, n2);
+	}
+
+	/// Checks if any component in the spectrum is excessively large or is nan.
+	void _debug_check(spectrum s) {
+		/*vec3d rgb = s.to_rgb();
+		if (rgb.x > 1.0 || rgb.y > 1.0 || rgb.z > 1.0) {
+			std::cout << "large element\n";
+		}
+		if (rgb.x < 0.0 || rgb.y < 0.0 || rgb.z < 0.0) {
+			std::cout << "negative element\n";
+		}
+		if (std::isnan(rgb.x) || std::isnan(rgb.y) || std::isnan(rgb.z)) {
+			std::cout << "nan\n";
+		}*/
+	}
+
 	spectrum bidirectional_path_tracer::incoming_light(const scene &sc, const ray &r, pcg32 &random) const {
 		std::size_t num_lights = sc.get_lights().size();
 		if (num_lights == 0) {
@@ -264,8 +288,10 @@ namespace fluid::renderer {
 		const primitive *light = sc.get_lights()[light_dist(random)];
 		primitives::surface_sample surf_sample = light->sample_surface(vec2d(dist(random), dist(random)));
 		// only purely diffuse light sources are supported
-		vec3d light_ray_dir_tangent = warping::unit_hemisphere_from_unit_square(vec2d(dist(random), dist(random)));
-		double light_ray_dir_pdf = warping::pdf_unit_hemisphere_from_unit_square();
+		vec3d light_ray_dir_tangent = warping::unit_hemisphere_from_unit_square_cosine(
+			vec2d(dist(random), dist(random))
+		);
+		double light_ray_dir_pdf = warping::pdf_unit_hemisphere_from_unit_square_cosine(light_ray_dir_tangent);
 		ray light_ray = scene::spawn_ray_from(
 			surf_sample.position, light_ray_dir_tangent, surf_sample.geometric_normal, ray_offset
 		);
@@ -277,7 +303,8 @@ namespace fluid::renderer {
 			cam_vert.attenuation = spectrum::identity;
 			cam_vert.position = r.origin;
 		}
-		_trace_path(cam_path, sc, max_camera_bounces, cam_ray, 1.0, ray_offset, random); // TODO camera pdf?
+		// TODO camera pdf?
+		_trace_path(cam_path, sc, max_camera_bounces, cam_ray, 1.0, transport_mode::radiance, ray_offset, random);
 		// trace light path
 		_path_vec light_path;
 		{
@@ -294,7 +321,10 @@ namespace fluid::renderer {
 			light_vert.pdf_forward = surf_sample.pdf / static_cast<double>(num_lights);
 			light_vert.prim = light;
 		}
-		_trace_path(light_path, sc, max_light_bounces, light_ray, light_ray_dir_pdf, ray_offset, random);
+		_trace_path(
+			light_path, sc, max_light_bounces, light_ray, light_ray_dir_pdf, transport_mode::importance,
+			ray_offset, random
+		);
 
 		spectrum result;
 		std::size_t count = 0;
@@ -306,7 +336,11 @@ namespace fluid::renderer {
 				spectrum s = modulate(
 					cam_vert.attenuation, cam_vert.prim->entity->mat.emission.get_value(cam_vert.uv)
 				);
+				// DEBUG variable
+				double mis = _mis_weight(cam_path, light_path, ci, 0, num_lights, true);
+
 				s *= _mis_weight(cam_path, light_path, ci, 0, num_lights, true);
+				_debug_check(s);
 				result += s;
 			}
 			if (!cam_vert.is_delta) {
@@ -327,14 +361,24 @@ namespace fluid::renderer {
 						light_vert.prim = new_light;
 						spectrum s = modulate(cam_vert.attenuation, light_vert.attenuation);
 						vec3d diff = light_vert.position - cam_vert.position;
-						vec3d out_dir = cam_vert.tangent * diff.normalized_unchecked();
-						s = modulate(s, cam_vert.surface_bsdf.f(cam_vert.incoming_ray_dir_tangent, out_dir));
-						s *= std::abs(
-							vec_ops::dot(out_dir, cam_vert.geometric_normal) *
-							vec_ops::dot(out_dir, new_surf_sample.geometric_normal)
-						) / diff.squared_length();
+						// DEBUG temporary variables for debugging
+						spectrum f = cam_vert.surface_bsdf.f(
+							cam_vert.tangent * diff.normalized_unchecked(),
+							cam_vert.incoming_ray_dir_tangent,
+							transport_mode::radiance
+						);
+						double geometry = _geometry(diff, cam_vert.geometric_normal, new_surf_sample.geometric_normal);
+
+						s = modulate(s, cam_vert.surface_bsdf.f(
+							cam_vert.tangent * diff.normalized_unchecked(),
+							cam_vert.incoming_ray_dir_tangent,
+							transport_mode::radiance
+						));
+						s *= _geometry(diff, cam_vert.geometric_normal, new_surf_sample.geometric_normal);
 						auto sa_light_vert = _scoped_assign_to(light_path[0], light_vert);
+						double mis = _mis_weight(cam_path, light_path, ci, 0, num_lights, false);
 						s *= _mis_weight(cam_path, light_path, ci, 0, num_lights, false);
+						_debug_check(s);
 						result += s;
 					}
 				}
@@ -344,24 +388,39 @@ namespace fluid::renderer {
 					if (!light_vert.is_delta) {
 						spectrum s = modulate(cam_vert.attenuation, light_vert.attenuation);
 						vec3d cam_to_light_norm = (light_vert.position - cam_vert.position).normalized_unchecked();
+						// DEBUG temporary variables for debugging
+						spectrum
+							f1 = cam_vert.surface_bsdf.f(
+								cam_vert.tangent * cam_to_light_norm, cam_vert.incoming_ray_dir_tangent,
+								transport_mode::radiance
+							),
+							f2 = light_vert.surface_bsdf.f(
+								light_vert.tangent * -cam_to_light_norm, light_vert.incoming_ray_dir_tangent,
+								transport_mode::importance
+							);
+						double mis = _mis_weight(cam_path, light_path, ci, li, num_lights, false);
+
 						s = modulate(s, cam_vert.surface_bsdf.f(
-							cam_vert.incoming_ray_dir_tangent, cam_vert.tangent * cam_to_light_norm
+							cam_vert.tangent * cam_to_light_norm, cam_vert.incoming_ray_dir_tangent,
+							transport_mode::radiance
 						));
 						s = modulate(s, light_vert.surface_bsdf.f(
-							light_vert.incoming_ray_dir_tangent, light_vert.tangent * -cam_to_light_norm
+							light_vert.tangent * -cam_to_light_norm, light_vert.incoming_ray_dir_tangent,
+							transport_mode::importance
 						));
 						if (!s.near_zero()) {
 							if (sc.test_visibility(cam_vert.position, light_vert.position, ray_offset)) {
-								// calculate G term
-								vec3d diff = cam_vert.position - light_vert.position;
-								double g = 1.0 / diff.squared_length();
-								diff *= std::sqrt(g);
-								g *= std::abs(vec_ops::dot(diff, cam_vert.geometric_normal));
-								g *= std::abs(vec_ops::dot(diff, light_vert.geometric_normal));
-								// multiply
-								s *= g;
-								// MIS
+								// multiply by G term
+								double geometry = _geometry(
+									cam_vert.position, light_vert.position,
+									cam_vert.geometric_normal, light_vert.geometric_normal
+								);
+								s *= _geometry(
+									cam_vert.position, light_vert.position,
+									cam_vert.geometric_normal, light_vert.geometric_normal
+								);
 								s *= _mis_weight(cam_path, light_path, ci, li, num_lights, false);
+								_debug_check(s);
 								result += s;
 							}
 						}
@@ -369,6 +428,6 @@ namespace fluid::renderer {
 				}
 			}
 		}
-		return result * 0.5;
+		return result;
 	}
 }
