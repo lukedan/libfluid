@@ -258,13 +258,6 @@ namespace fluid::renderer {
 				alignas(__m128d) double isect[2];
 				bool hit1 = false, hit2 = false;
 				{
-					vec3<__m128d> vo, vd;
-					vo.x = _mm_set1_pd(r.origin.x);
-					vo.y = _mm_set1_pd(r.origin.y);
-					vo.z = _mm_set1_pd(r.origin.z);
-					vd.x = _mm_set1_pd(r.direction.x);
-					vd.y = _mm_set1_pd(r.direction.y);
-					vd.z = _mm_set1_pd(r.direction.z);
 					__m128d max_t_2 = _mm_set1_pd(hit_res.t);
 
 					__m128d xmin = _mm_mul_pd(_mm_sub_pd(current->children_bb.min.x, vo2.x), inv_vd2.x);
