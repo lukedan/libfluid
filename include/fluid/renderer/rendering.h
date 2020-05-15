@@ -14,7 +14,7 @@
 #define FLUID_RENDERER_PARALLEL
 
 namespace fluid::renderer {
-	/// Renders the scene to an image using an naive method for parallelization.
+	/// Renders the scene to an image using a naive method for parallelization.
 	template <bool Monitor = false, typename Incoming> image<spectrum> render_naive(
 		Incoming &&li, const camera &cam, vec2s size, std::size_t spp, pcg32 &random
 	) {
@@ -70,7 +70,7 @@ namespace fluid::renderer {
 		return result;
 	}
 
-	/// Accumulates incoming light to the given buffer using an naive method for parallelization.
+	/// Accumulates incoming light to the given buffer using a naive method for parallelization.
 	template <bool Monitor = true, typename Incoming> void accumulate_naive(
 		Incoming &&li, image<spectrum> &buf, const camera &cam, std::size_t spp, pcg32 &random
 	) {

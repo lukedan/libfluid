@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#include <emmintrin.h>
+
 #include "common.h"
 #include "primitive.h"
 
@@ -14,7 +16,17 @@ namespace fluid::renderer {
 	public:
 		/// A node in the tree.
 		struct node {
-			aab3d bounding_box; ///< The bounding box of this node.
+			/// Default constructor.
+			node() {
+			}
+			/// Destructor.
+			~node();
+
+			union {
+				/// Children bounding boxes. The lower 64 bits stores the values for \ref child1.
+				aab3<__m128d> children_bb;
+				aab3d leaf_bb; ///< Bounding box of this node, only valid for leaf nodes.
+			};
 			/// The first child. This is \p nullptr if this node is a leaf node, and non-null otherwise. Therefore
 			/// this member determines which member of the next union is active.
 			node *child1 = nullptr;
@@ -27,6 +39,12 @@ namespace fluid::renderer {
 			bool is_leaf() const {
 				return child1 == nullptr;
 			}
+
+			/// Sets the children bounding boxes of this node.
+			void set_children_bounding_boxes(aab3d c1, aab3d c2);
+			/// Sets the children bounding boxes of this node, assuming that the child nodes are leaves (i.e., that
+			/// \ref leaf_bb is active for the children).
+			void set_children_bounding_boxes_leaf();
 		};
 
 		/// Default constructor.
