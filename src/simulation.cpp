@@ -133,11 +133,11 @@ namespace fluid {
 		_fluid_cells.clear();
 	}
 
-	void simulation::seed_cell(vec3s cell, vec3d velocity, std::size_t density) {
+	void simulation::seed_cell(vec3s cell, vec3d velocity, std::size_t dens) {
 		std::size_t
 			index = grid().grid().index_to_raw(cell),
 			num = _space_hash(cell).count,
-			target = density * density * density;
+			target = dens * dens * dens;
 		std::uniform_real_distribution<double> dist(0.0, cell_size);
 		vec3d offset = grid_offset + vec3d(cell) * cell_size;
 		for (; num < target; ++num) {
@@ -150,7 +150,7 @@ namespace fluid {
 		_space_hash(cell).count = target;
 	}
 
-	void simulation::seed_box(vec3d start, vec3d size, vec3d vel, std::size_t density) {
+	void simulation::seed_box(vec3d start, vec3d size, vec3d vel, std::size_t dens) {
 		vec3d end = start + size;
 		vec3s
 			start_cell = world_position_to_cell_index_unclamped(start),
@@ -162,11 +162,11 @@ namespace fluid {
 					pos.x > start.x && pos.y > start.y && pos.z > start.z &&
 					pos.x < end.x && pos.y < end.y && pos.z < end.z;
 			},
-			vel, density
+			vel, dens
 				);
 	}
 
-	void simulation::seed_sphere(vec3d center, double radius, vec3d vel, std::size_t density) {
+	void simulation::seed_sphere(vec3d center, double radius, vec3d vel, std::size_t dens) {
 		vec3s
 			start_cell = world_position_to_cell_index_unclamped(center - vec3d(radius, radius, radius)),
 			end_cell = world_position_to_cell_index_unclamped(center + vec3d(radius, radius, radius));
@@ -176,7 +176,7 @@ namespace fluid {
 			[&](vec3d pos) {
 				return (pos - center).squared_length() < sqr_radius;
 			},
-			vel, density
+			vel, dens
 				);
 	}
 
@@ -615,7 +615,7 @@ namespace fluid {
 		for (int i = 0; i < nparticles; ++i) {
 			particle &p = _particles[static_cast<std::size_t>(i)];
 			vec3d from = p.old_position, to = p.position;
-			for (std::size_t i = 0; i < 3; ++i) {
+			for (std::size_t j = 0; j < 3; ++j) {
 				bool into_wall = false;
 				grid().grid().march_cells(
 					[this, &p, &from, &to, &into_wall](vec3i pos, std::size_t dim, vec3d normal, double t) {

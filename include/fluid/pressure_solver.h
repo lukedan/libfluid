@@ -80,7 +80,7 @@ namespace fluid {
 
 		/// Computes the preconditioner vector. The input vector must have enough space (i.e., must be as long as
 		/// \ref _a).
-		[[nodiscard]] std::vector<double> _compute_preconditioner(double dt) const;
+		[[nodiscard]] std::vector<double> _compute_preconditioner() const;
 		/// Multiplies the given vector by the preconditioner matrix. The input vectors must have enough space.
 		void _apply_preconditioner(
 			std::vector<double> &z, std::vector<double> &q_scratch,

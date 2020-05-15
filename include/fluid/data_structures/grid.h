@@ -185,13 +185,13 @@ namespace fluid {
 				std::size_t min_coord = 0;
 				double mint = 2.0;
 				vec_ops::for_each(
-					[&mint, &min_coord](double tv, std::size_t coord, std::size_t adv) {
+					[&mint, &min_coord](double tv, std::size_t coord) {
 						if (tv < mint) {
 							mint = tv;
 							min_coord = coord;
 						}
 					},
-					t, coord, advance
+					t, coord
 						);
 				if (!(mint <= 1.0)) {
 					// emergency break - some floating point error has led us to outside of the path
@@ -210,13 +210,14 @@ namespace fluid {
 
 		/// Converts a (x, y, z) position into a raw index for \ref _cells.
 		std::size_t index_to_raw(size_type i) const {
-			// hopefully the compiler will optimize away this empty check in the release build
+#ifndef NDEBUG
 			vec_ops::for_each(
 				[](std::size_t coord, std::size_t size) {
 					assert(coord < size);
 				},
 				i, _size
 					);
+#endif
 			return vec_ops::dot(i, _layer_offset);
 		}
 		/// Converts a raw index for \ref _cells to a (x, y, z) position.

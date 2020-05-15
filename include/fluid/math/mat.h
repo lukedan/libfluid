@@ -206,7 +206,7 @@ namespace fluid {
 					std::size_t rid = 0;
 					vec_ops::for_each(
 						[&](const row_type &row) {
-							T value = rows[rid][0] * get_submatrix_minor(rid, 0).get_determinant();
+							T value = row[0] * get_submatrix_minor(rid, 0).get_determinant();
 							result = positive ? result + value : result - value;
 							++rid;
 							positive = !positive;

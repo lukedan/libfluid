@@ -23,8 +23,8 @@ namespace fluid::renderer {
 	}
 
 
-	void scene::add_mesh_entity(const mesh_t &m, const rmat3x4d &trans, entity_info i) {
-		entity_info &ent = _entities.emplace_back(std::move(i));
+	void scene::add_mesh_entity(const mesh_t &m, const rmat3x4d &trans, entity_info info) {
+		entity_info &ent = _entities.emplace_back(std::move(info));
 		std::vector<vec3d> trans_pos(m.positions.size());
 		for (std::size_t i = 0; i < m.positions.size(); ++i) {
 			trans_pos[i] = trans * vec4d(m.positions[i], 1.0);

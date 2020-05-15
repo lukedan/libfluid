@@ -49,7 +49,7 @@ namespace fluid::renderer {
 			return spectrum();
 		}
 
-		outgoing_ray_sample specular_reflection_brdf::sample_f(vec3d norm_in, vec2d random, transport_mode) const {
+		outgoing_ray_sample specular_reflection_brdf::sample_f(vec3d norm_in, vec2d, transport_mode) const {
 			outgoing_ray_sample result;
 			result.norm_out_direction_tangent.x = -norm_in.x;
 			result.norm_out_direction_tangent.y = norm_in.y;
@@ -59,7 +59,7 @@ namespace fluid::renderer {
 			return result;
 		}
 
-		double specular_reflection_brdf::pdf(vec3d norm_in, vec3d norm_out) const {
+		double specular_reflection_brdf::pdf(vec3d, vec3d) const {
 			return 0.0;
 		}
 
@@ -108,7 +108,7 @@ namespace fluid::renderer {
 			return result;
 		}
 
-		double specular_transmission_bsdf::pdf(vec3d norm_in, vec3d norm_out) const {
+		double specular_transmission_bsdf::pdf(vec3d, vec3d) const {
 			return 0.0;
 		}
 

@@ -18,7 +18,7 @@ namespace fluid {
 	}
 
 	vec3i voxelizer::resize_reposition_grid_constrained(
-		vec3d min, vec3d max, double ref_cell_size, vec3d ref_grid_offset, vec3s grid_size
+		vec3d min, vec3d max, double ref_cell_size, vec3d ref_grid_offset
 	) {
 		cell_size = ref_cell_size;
 		vec3i

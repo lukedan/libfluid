@@ -41,9 +41,7 @@ namespace fluid {
 		/// \ref voxels.
 		///
 		/// \return The offset of \ref voxels in the given grid.
-		vec3i resize_reposition_grid_constrained(
-			vec3d min, vec3d max, double ref_cell_size, vec3d ref_grid_offset, vec3s grid_size
-		);
+		vec3i resize_reposition_grid_constrained(vec3d min, vec3d max, double ref_cell_size, vec3d ref_grid_offset);
 
 		/// Returns the range of cells that overlap a reference grid. The input is the result of
 		/// \ref resize_reposition_grid_constrained() and the size of the reference grid.

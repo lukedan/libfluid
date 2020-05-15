@@ -22,7 +22,7 @@ namespace fluid {
 		_a_scale = dt / (_sim.density * _sim.cell_size * _sim.cell_size);
 		_compute_a_matrix();
 		std::vector<double> b = _compute_b_vector();
-		std::vector<double> precon = _compute_preconditioner(dt);
+		std::vector<double> precon = _compute_preconditioner();
 		double residual = 0.0;
 
 		std::vector<double> p(_fluid_cells.size(), 0.0);
@@ -39,14 +39,14 @@ namespace fluid {
 		_apply_preconditioner(z, q_scratch, precon, r);
 		std::vector<double> s = z;
 
-		double sigma = vec_ops::dynamic::dot(z, r);
+		double sigma_ps = vec_ops::dynamic::dot(z, r);
 
 		std::size_t i = 0;
 		for (; i < max_iterations; ++i) {
 
 			_apply_a(z, s);
 
-			double alpha = sigma / vec_ops::dynamic::dot(z, s);
+			double alpha = sigma_ps / vec_ops::dynamic::dot(z, s);
 
 			_muladd(p, p, s, alpha);
 			_muladd(r, r, z, -alpha);
@@ -61,11 +61,11 @@ namespace fluid {
 
 			double sigma_new = vec_ops::dynamic::dot(z, r);
 
-			double beta = sigma_new / sigma;
+			double beta = sigma_new / sigma_ps;
 
 			_muladd(s, z, s, beta);
 
-			sigma = sigma_new;
+			sigma_ps = sigma_new;
 		}
 		return { p, residual, i };
 	}
@@ -241,7 +241,7 @@ namespace fluid {
 		return b;
 	}
 
-	std::vector<double> pressure_solver::_compute_preconditioner(double dt) const {
+	std::vector<double> pressure_solver::_compute_preconditioner() const {
 		std::vector<double> precon(_fluid_cells.size(), 0.0);
 		for (std::size_t i = 0; i < _fluid_cells.size(); ++i) {
 			vec3s pos = _fluid_cells[i];

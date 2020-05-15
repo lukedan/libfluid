@@ -13,7 +13,7 @@ namespace fluid {
 			obstacle_mesh.positions.begin(), obstacle_mesh.positions.end()
 		);
 		voxelizer vox;
-		vec3i offset = vox.resize_reposition_grid_constrained(rmin, rmax, cell_size, ref_grid_offset, ref_grid_size);
+		vec3i offset = vox.resize_reposition_grid_constrained(rmin, rmax, cell_size, ref_grid_offset);
 		vox.voxelize_mesh_surface(obstacle_mesh);
 		vox.mark_exterior();
 

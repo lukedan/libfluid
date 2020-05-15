@@ -233,6 +233,15 @@ namespace fluid::renderer {
 		const primitive *hit = nullptr;
 		ray_cast_result hit_res;
 		hit_res.t = max_t;
+		
+		vec3<__m128d>
+			vo2(_mm_set1_pd(r.origin.x), _mm_set1_pd(r.origin.y), _mm_set1_pd(r.origin.z)),
+			inv_vd2(
+				_mm_set1_pd(1.0 / r.direction.x),
+				_mm_set1_pd(1.0 / r.direction.y),
+				_mm_set1_pd(1.0 / r.direction.z)
+			);
+
 		while (!nodes.empty()) {
 			node *current = nodes.top();
 			nodes.pop();
@@ -258,22 +267,22 @@ namespace fluid::renderer {
 					vd.z = _mm_set1_pd(r.direction.z);
 					__m128d max_t_2 = _mm_set1_pd(hit_res.t);
 
-					__m128d xmin = _mm_div_pd(_mm_sub_pd(current->children_bb.min.x, vo.x), vd.x);
-					__m128d xmax = _mm_div_pd(_mm_sub_pd(current->children_bb.max.x, vo.x), vd.x);
+					__m128d xmin = _mm_mul_pd(_mm_sub_pd(current->children_bb.min.x, vo2.x), inv_vd2.x);
+					__m128d xmax = _mm_mul_pd(_mm_sub_pd(current->children_bb.max.x, vo2.x), inv_vd2.x);
 
 					__m128d tmax = _mm_max_pd(xmin, xmax);
 					xmin = _mm_min_pd(xmin, xmax);
 					xmax = tmax;
 
-					__m128d ymin = _mm_div_pd(_mm_sub_pd(current->children_bb.min.y, vo.y), vd.y);
-					__m128d ymax = _mm_div_pd(_mm_sub_pd(current->children_bb.max.y, vo.y), vd.y);
+					__m128d ymin = _mm_mul_pd(_mm_sub_pd(current->children_bb.min.y, vo2.y), inv_vd2.y);
+					__m128d ymax = _mm_mul_pd(_mm_sub_pd(current->children_bb.max.y, vo2.y), inv_vd2.y);
 
 					tmax = _mm_max_pd(ymin, ymax);
 					ymin = _mm_min_pd(ymin, ymax);
 					ymax = tmax;
 
-					__m128d zmin = _mm_div_pd(_mm_sub_pd(current->children_bb.min.z, vo.z), vd.z);
-					__m128d zmax = _mm_div_pd(_mm_sub_pd(current->children_bb.max.z, vo.z), vd.z);
+					__m128d zmin = _mm_mul_pd(_mm_sub_pd(current->children_bb.min.z, vo2.z), inv_vd2.z);
+					__m128d zmax = _mm_mul_pd(_mm_sub_pd(current->children_bb.max.z, vo2.z), inv_vd2.z);
 
 					tmax = _mm_max_pd(zmin, zmax);
 					zmin = _mm_min_pd(zmin, zmax);
@@ -299,9 +308,7 @@ namespace fluid::renderer {
 				aab_tests += 2;
 #endif
 				if (!hit1) {
-					if (hit2) {
-						nodes.emplace(current->child2);
-					}
+					nodes.emplace(current->child2);
 				} else if (!hit2) {
 					nodes.emplace(current->child1);
 				} else { // both are hit
