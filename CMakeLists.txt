@@ -48,7 +48,9 @@ if(FLUID_BUILD_RENDERER)
 			"src/renderer/scene.cpp")
 endif()
 if(MSVC)
-	target_compile_options(fluid PUBLIC /arch:AVX2)
+	target_compile_options(fluid
+		PUBLIC /arch:AVX2
+		PRIVATE /W4)
 elseif(CMAKE_COMPILER_IS_GNUCXX)
 	target_link_libraries(fluid
 		PUBLIC stdc++fs)

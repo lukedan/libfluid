@@ -20,7 +20,7 @@ namespace fluid {
 		explicit grid(size_type size) : grid(size, Cell{}) {
 		}
 		/// Initializes the cell storage, seting all cells to the given value.
-		grid(size_type size, const Cell &c) : _cells(get_array_size(size)), _size(size) {
+		grid(size_type size, const Cell &c) : _cells(get_array_size(size), c), _size(size) {
 			std::size_t mul = 1;
 			vec_ops::for_each(
 				[&mul](std::size_t &offset, std::size_t size) {
@@ -280,7 +280,7 @@ namespace fluid {
 		}
 		/// End of recursion, where the callback is actually invoked.
 		template <typename Callback, typename It> FLUID_FORCEINLINE void _for_each_impl(
-			Callback &&cb, It it, size_type min, size_type max, size_type cur
+			Callback &&cb, It it, size_type, size_type, size_type cur
 		) const {
 			cb(cur, *it);
 		}

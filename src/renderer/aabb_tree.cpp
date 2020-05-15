@@ -284,7 +284,6 @@ namespace fluid::renderer {
 					hit_res = result;
 				}
 			} else {
-				node *c1 = current->child1, *c2 = current->child2;
 				alignas(__m128d) double isect[2];
 				bool hit1 = false, hit2 = false;
 				{
@@ -295,7 +294,7 @@ namespace fluid::renderer {
 					vd.x = _mm_set1_pd(r.direction.x);
 					vd.y = _mm_set1_pd(r.direction.y);
 					vd.z = _mm_set1_pd(r.direction.z);
-					__m128d max_t = _mm_set1_pd(hit_res.t);
+					__m128d max_t_2 = _mm_set1_pd(hit_res.t);
 
 					__m128d xmin = _mm_div_pd(_mm_sub_pd(current->children_bb.min.x, vo.x), vd.x);
 					__m128d xmax = _mm_div_pd(_mm_sub_pd(current->children_bb.max.x, vo.x), vd.x);
@@ -323,8 +322,8 @@ namespace fluid::renderer {
 
 					__m128d cmpmin = _mm_max_pd(tmin, _mm_setzero_pd()); // merge max > min & max > 0
 
-					int do_isect = _mm_movemask_pd(_mm_cmpgt_pd(tmax, cmpmin));
-					do_isect &= _mm_movemask_pd(_mm_cmplt_pd(tmax, max_t));
+					int do_isect = _mm_movemask_pd(_mm_cmpge_pd(tmax, cmpmin));
+					do_isect &= _mm_movemask_pd(_mm_cmplt_pd(tmin, max_t_2));
 
 					if (do_isect == 0) {
 						continue;

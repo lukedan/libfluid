@@ -12,7 +12,7 @@ namespace fluid::renderer {
 	/// A version of \ref _pdf_to_solid_angle() that accepts a normalized direction and the squared distance between
 	/// the two points.
 	double _pdf_to_solid_angle_norm_diff(
-		double pdf_source, vec3d source, vec3d norm_diff, double squared_length, vec3d hit_normal
+		double pdf_source, vec3d norm_diff, double squared_length, vec3d hit_normal
 	) {
 		// TODO no handling of infinite light sources here
 		// TODO no handling of media here
@@ -23,7 +23,7 @@ namespace fluid::renderer {
 	double _pdf_to_solid_angle(double pdf_source, vec3d source, vec3d hit, vec3d hit_normal) {
 		vec3d diff = hit - source;
 		double sqr_len = diff.squared_length();
-		return _pdf_to_solid_angle_norm_diff(pdf_source, source, diff / std::sqrt(sqr_len), sqr_len, hit_normal);
+		return _pdf_to_solid_angle_norm_diff(pdf_source, diff / std::sqrt(sqr_len), sqr_len, hit_normal);
 	}
 
 	/// Stores information about an intersection.
@@ -54,7 +54,7 @@ namespace fluid::renderer {
 			double sqr_out_len = out_norm.squared_length();
 			out_norm /= std::sqrt(sqr_out_len); // actually normalize out_norm
 			double pdf = surface_bsdf.pdf(tangent * in_norm, tangent * out_norm);
-			return _pdf_to_solid_angle_norm_diff(pdf, position, out_norm, sqr_out_len, next.geometric_normal);
+			return _pdf_to_solid_angle_norm_diff(pdf, out_norm, sqr_out_len, next.geometric_normal);
 		}
 		/// Returns the probability density function of the next vertex being sampled by this vertex in solid angles,
 		/// if this vertex is a light source.
@@ -313,7 +313,6 @@ namespace fluid::renderer {
 		);
 
 		spectrum result;
-		std::size_t count = 0;
 		// connect light rays
 		for (std::size_t ci = 1; ci < cam_path.size(); ++ci) {
 			_vertex &cam_vert = cam_path[ci];
@@ -350,7 +349,6 @@ namespace fluid::renderer {
 						));
 						s *= _geometry(diff, cam_vert.geometric_normal, new_surf_sample.geometric_normal);
 						auto sa_light_vert = _scoped_assign_to(light_path[0], light_vert);
-						double mis = _mis_weight(cam_path, light_path, ci, 0, num_lights, false);
 						s *= _mis_weight(cam_path, light_path, ci, 0, num_lights, false);
 						result += s;
 					}
@@ -372,10 +370,6 @@ namespace fluid::renderer {
 						if (!s.near_zero()) {
 							if (sc.test_visibility(cam_vert.position, light_vert.position, ray_offset)) {
 								// multiply by G term
-								double geometry = _geometry(
-									cam_vert.position, light_vert.position,
-									cam_vert.geometric_normal, light_vert.geometric_normal
-								);
 								s *= _geometry(
 									cam_vert.position, light_vert.position,
 									cam_vert.geometric_normal, light_vert.geometric_normal
