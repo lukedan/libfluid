@@ -89,14 +89,13 @@ namespace fluid::renderer {
 	};
 	/// Stores information about a bucket.
 	struct _bucket {
-		constexpr static double
-			double_min = std::numeric_limits<double>::min(), ///< The minimum value of a \p double.
-			double_max = std::numeric_limits<double>::max(); ///< The maximum value of a \p double.
+		/// The maximum value of a \p double.
+		constexpr static double double_max = std::numeric_limits<double>::max();
 
 		/// Initializes \ref aabb_bound to be the maximum negative box.
 		_bucket() : aabb_bound(
 			vec3d(double_max, double_max, double_max),
-			vec3d(double_min, double_min, double_min)
+			vec3d(-double_max, -double_max, -double_max)
 		) {
 		}
 
@@ -105,8 +104,8 @@ namespace fluid::renderer {
 			return static_cast<double>(count) * aabb_tree::evaluate_heuristic(aabb_bound);
 		}
 
-		std::size_t count = 0; ///< The number of primitives in this bucket.
 		aab3d aabb_bound; ///< The bound of all AABBs in this bucket.
+		std::size_t count = 0; ///< The number of primitives in this bucket.
 	};
 	void aabb_tree::build() {
 		constexpr std::size_t num_buckets = 12;
@@ -206,52 +205,15 @@ namespace fluid::renderer {
 				}
 			}
 			// split
-			aab3d
-				aaabb1(
-					vec3d(_bucket::double_max, _bucket::double_max, _bucket::double_max),
-					vec3d(_bucket::double_min, _bucket::double_min, _bucket::double_min)
-				),
-				aaabb2(
-					vec3d(_bucket::double_max, _bucket::double_max, _bucket::double_max),
-					vec3d(_bucket::double_min, _bucket::double_min, _bucket::double_min)
-				);
 			std::size_t end_before = step.begin;
 			for (std::size_t i = step.begin; i < step.end; ++i) {
 				if (leaves[i].bucket <= min_heuristic_split) {
-					aaabb1 = aab3d::bounding(aaabb1, leaves[i].node->leaf_bb);
 					std::swap(leaves[end_before], leaves[i]);
 					++end_before;
-				} else {
-					aaabb2 = aab3d::bounding(aaabb2, leaves[i].node->leaf_bb);
 				}
 			}
 			node &n = _node_pool[alloc++];
-
-			aab3d bb1 = leaves[step.begin].node->leaf_bb, bb2 = leaves[end_before].node->leaf_bb;
-			for (std::size_t i = step.begin; i < end_before; ++i) {
-				bb1 = aab3d::bounding(bb1, leaves[i].node->leaf_bb);
-			}
-			for (std::size_t i = end_before; i < step.end; ++i) {
-				bb2 = aab3d::bounding(bb2, leaves[i].node->leaf_bb);
-			}
-			n.set_children_bounding_boxes(bb1, bb2);
-			/*if (
-				(bb1.min - min_heuristic_bb1.min).squared_length() > 1e-6 ||
-				(bb1.max - min_heuristic_bb1.max).squared_length() > 1e-6 ||
-				(bb2.min - min_heuristic_bb2.min).squared_length() > 1e-6 ||
-				(bb2.max - min_heuristic_bb2.max).squared_length() > 1e-6
-				) {
-				std::cout << "fuck\n";
-			}
-			if (
-				(bb1.min - aaabb1.min).squared_length() > 1e-6 ||
-				(bb1.max - aaabb1.max).squared_length() > 1e-6 ||
-				(bb2.min - aaabb2.min).squared_length() > 1e-6 ||
-				(bb2.max - aaabb2.max).squared_length() > 1e-6
-				) {
-				std::cout << "fuck\n";
-			}*/
-
+			n.set_children_bounding_boxes(min_heuristic_bb1, min_heuristic_bb2);
 			*step.parent_ptr = &n;
 			stk.emplace(n.child1, step.begin, end_before);
 			stk.emplace(n.child2, end_before, step.end);
